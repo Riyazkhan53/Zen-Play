@@ -52,7 +52,9 @@ jobs:
         working-directory: android
         # The default Expo template signs release builds with the debug key:
         # fine for installing on your own phones, not for the Play Store.
-        run: ./gradlew assembleRelease --no-daemon
+        # arm64 only: what virtually every Android phone from the last several years
+        # uses. Keeps the APK small and the build quick.
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
 
       - name: Collect APK
         run: |
