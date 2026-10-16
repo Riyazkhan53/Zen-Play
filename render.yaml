@@ -1,0 +1,27 @@
+services:
+  # Online multiplayer server (WebSocket rooms)
+  - type: web
+    name: zen-play-server
+    runtime: node
+    buildCommand: npm ci && npm run server:build
+    startCommand: node dist-server/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+
+  # Web version of the app
+  - type: web
+    name: zen-play
+    runtime: static
+    buildCommand: npm ci && npm run web:build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: EXPO_PUBLIC_SERVER_URL
+        value: wss://zen-play-server.onrender.com

@@ -1,0 +1,13 @@
+import { SEAT_COLORS } from '@/games/ludo/engine';
+import type { GameId } from '@/games/types';
+
+import { LUDO_COLORS, PLAYER_COLORS } from './theme';
+
+/** Colour a seat plays as, so the lobby matches the board. */
+export function seatColor(gameId: GameId, seat: number, seatCount: number): string {
+  if (gameId === 'ludo') {
+    const colors = SEAT_COLORS[Math.max(2, Math.min(4, seatCount))];
+    return LUDO_COLORS[colors[seat] ?? 'blue'];
+  }
+  return PLAYER_COLORS[seat % PLAYER_COLORS.length];
+}
