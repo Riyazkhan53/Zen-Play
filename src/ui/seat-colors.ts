@@ -9,5 +9,6 @@ export function seatColor(gameId: GameId, seat: number, seatCount: number): stri
     const colors = SEAT_COLORS[Math.max(2, Math.min(4, seatCount))];
     return LUDO_COLORS[colors[seat] ?? 'blue'];
   }
+  if (gameId === 'chess') return seat === 0 ? '#F8FAFC' : '#475569';
   return PLAYER_COLORS[seat % PLAYER_COLORS.length];
 }

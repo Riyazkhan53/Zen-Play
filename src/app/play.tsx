@@ -3,20 +3,14 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { Dice } from '@/components/dice';
-import { LudoBoard } from '@/components/ludo-board';
-import { SnakesBoard } from '@/components/snakes-board';
 import { Banner, Button, Card, Screen, TopBar } from '@/components/ui';
-import { HOME, LudoState } from '@/games/ludo/engine';
-import { gameMeta } from '@/games/registry';
-import { SnakesState } from '@/games/snakes/engine';
+import { GAME_UI } from '@/game-ui';
+import { ENGINES, gameMeta } from '@/games/registry';
 import { useProfile } from '@/lib/profile';
 import type { RoomView } from '@/net/protocol';
 import { clearError, leaveSession, send, useSession } from '@/net/session';
 import { seatColor } from '@/ui/seat-colors';
 import { colors, MAX_WIDTH, radius } from '@/ui/theme';
-
-type AnyState = LudoState | SnakesState;
 
 export default function Play() {
   const session = useSession();
@@ -24,7 +18,7 @@ export default function Play() {
   const { width, height } = useWindowDimensions();
   const [confirmLeave, setConfirmLeave] = useState(false);
   const { room } = session;
-  const state = session.game as AnyState | null;
+  const state = session.game;
 
   const leave = () => {
     setConfirmLeave(false);
@@ -37,9 +31,12 @@ export default function Play() {
     if (room && !room.started) router.replace('/room');
   }, [room]);
 
-  useHaptics(state, room, clientId);
+  const engine = room ? ENGINES[room.gameId] : undefined;
+  const turn = engine && state != null ? engine.currentSeat(state) : null;
+  useTurnHaptic(turn, room, clientId);
 
-  if (!room || !state) {
+  const ui = room ? GAME_UI[room.gameId] : undefined;
+  if (!room || state == null || !engine || !ui) {
     return (
       <Screen>
         <TopBar title="Zen-Play" onBack={leave} />
@@ -49,53 +46,52 @@ export default function Play() {
   }
 
   const game = gameMeta(room.gameId)!;
+  const over = turn == null;
+  const rankings = engine.rankings(state);
   const mySeats = room.seats.map((s, i) => (s.ownerId === clientId ? i : -1)).filter((i) => i >= 0);
   const isHost = room.hostClientId === clientId;
-  const turn = state.over ? null : state.turn;
   const myTurn = turn != null && mySeats.includes(turn);
   // Screen caps content at MAX_WIDTH with 16px gutters; the board frame adds 14px.
   const contentWidth = Math.min(width, MAX_WIDTH) - 32;
   const wide = width >= 700 && width > height * 1.05;
+  const panelWidth = 340;
   const boardSize = Math.floor(
-    wide
-      ? Math.min(height - 100, contentWidth - 340 - 14 - 14)
-      : Math.min(contentWidth - 14, Math.max(260, height - 340), 720),
+    ui.shape === 'table'
+      ? wide
+        ? contentWidth - panelWidth - 28
+        : contentWidth - 14
+      : wide
+        ? Math.min(height - 100, contentWidth - panelWidth - 28)
+        : Math.min(contentWidth - 14, Math.max(260, height - 340), 720),
   );
+  const turnColor = turn != null ? seatColor(room.gameId, turn, room.seats.length) : colors.muted;
+  const act = (seat: number, move: unknown) => send({ t: 'move', seat, move });
+  const props = { state, room, size: boardSize, mySeats, seq: session.seq, act };
+  const { Board, Controls } = ui;
+  const draw = ui.isDraw?.(state) ?? false;
 
-  const roll = () => {
-    if (turn != null) send({ t: 'move', seat: turn, move: { type: 'roll' } });
-  };
-
-  const isLudo = room.gameId === 'ludo';
-  const ludoState = isLudo ? (state as LudoState) : null;
-  const canRoll = myTurn && (!ludoState || ludoState.phase === 'roll');
-  const dice = isLudo ? ludoState!.dice : ((state as SnakesState).last?.dice ?? null);
-  const turnColor = turn != null ? seatColor(room.gameId, turn, room.seats.length) : colors.border;
-
-  const board = isLudo ? (
-    <LudoBoard
-      state={ludoState!}
-      size={boardSize}
-      canMove={myTurn}
-      onMoveToken={(token) => send({ t: 'move', seat: ludoState!.turn, move: { type: 'move', token } })}
-    />
-  ) : (
-    <SnakesBoard state={state as SnakesState} size={boardSize} />
-  );
+  const hint = (() => {
+    if (over) return '';
+    const seat = room.seats[turn];
+    if (!myTurn)
+      return seat?.bot ? 'Computer is thinking…' : seat?.connected === false ? 'Offline — waiting…' : 'Their turn';
+    const h = ui.hint(state, room, true);
+    return mySeats.length > 1 ? `${seat.name}'s turn · ${h}` : h;
+  })();
 
   const panel = (
-    <View style={[styles.panel, wide && styles.panelWide]}>
+    <View style={[styles.panel, wide && { width: panelWidth }]}>
       <Card style={styles.turnCard}>
         <Text style={styles.event} numberOfLines={2}>
-          {describeLast(room, state)}
+          {ui.status(state, room)}
         </Text>
-        <View style={styles.diceRow}>
-          <Dice value={dice} rollKey={session.seq} color={turnColor} canRoll={canRoll} onRoll={roll} />
+        <View style={styles.turnRow}>
+          {Controls ? <Controls {...props} /> : null}
           <View style={styles.flex}>
             <Text style={[styles.turnName, { color: turnColor }]} numberOfLines={1}>
               {turn != null ? room.seats[turn].name : 'Game over'}
             </Text>
-            <Text style={styles.turnHint}>{turnHint(state, room, myTurn, mySeats.length > 1)}</Text>
+            {hint ? <Text style={styles.turnHint}>{hint}</Text> : null}
           </View>
         </View>
       </Card>
@@ -110,8 +106,8 @@ export default function Play() {
               {seat.ownerId === clientId ? <Text style={styles.you}> · you</Text> : null}
             </Text>
             {!seat.connected ? <Text style={styles.offline}>offline</Text> : null}
-            <Text style={styles.progress}>{progressLabel(state, i)}</Text>
-            {isHost && !seat.connected && !seat.bot && !state.over ? (
+            <Text style={styles.progress}>{ui.detail(state, i)}</Text>
+            {isHost && !seat.connected && !seat.bot && !over ? (
               <Button
                 title="Bot"
                 variant="ghost"
@@ -129,7 +125,7 @@ export default function Play() {
     <Screen>
       <TopBar
         title={`${game.emoji}  ${game.name}`}
-        onBack={() => (state.over ? leave() : setConfirmLeave(true))}
+        onBack={() => (over ? leave() : setConfirmLeave(true))}
         right={
           room.code ? (
             <Text style={styles.code} selectable>
@@ -141,23 +137,32 @@ export default function Play() {
       {session.error ? <Banner message={session.error} onClose={clearError} /> : null}
       {session.status === 'reconnecting' ? <Text style={styles.reconnecting}>Reconnecting…</Text> : null}
 
-      <ScrollView contentContainerStyle={[styles.body, wide && styles.bodyWide]} bounces={false}>
-        <View style={styles.boardFrame}>{board}</View>
+      <ScrollView
+        contentContainerStyle={[styles.body, wide && styles.bodyWide]}
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.boardFrame}>
+          <Board {...props} />
+        </View>
         {panel}
       </ScrollView>
 
-      <Modal visible={state.over} transparent animationType="fade">
+      <Modal visible={over} transparent animationType="fade">
         <View style={styles.overlay}>
           <Card style={styles.dialog}>
-            <Text style={styles.trophy}>🏆</Text>
-            <Text style={styles.dialogTitle}>{room.seats[state.rankings[0]]?.name} wins!</Text>
-            {state.rankings.map((seat, place) => (
-              <View key={seat} style={styles.rank}>
-                <Text style={styles.rankPlace}>{place + 1}</Text>
-                <View style={[styles.dot, { backgroundColor: seatColor(room.gameId, seat, room.seats.length) }]} />
-                <Text style={styles.rankName}>{room.seats[seat]?.name}</Text>
-              </View>
-            ))}
+            <Text style={styles.trophy}>{draw ? '🤝' : '🏆'}</Text>
+            <Text style={styles.dialogTitle}>{ui.result(state, room)}</Text>
+            {!draw
+              ? rankings.map((seat, place) => (
+                  <View key={seat} style={styles.rank}>
+                    <Text style={styles.rankPlace}>{place + 1}</Text>
+                    <View style={[styles.dot, { backgroundColor: seatColor(room.gameId, seat, room.seats.length) }]} />
+                    <Text style={styles.rankName}>{room.seats[seat]?.name}</Text>
+                    <Text style={styles.rankDetail}>{ui.detail(state, seat)}</Text>
+                  </View>
+                ))
+              : null}
             {isHost ? (
               <Button title="Play again" onPress={() => send({ t: 'rematch' })} style={styles.dialogBtn} />
             ) : (
@@ -191,62 +196,16 @@ export default function Play() {
   );
 }
 
-/** A little buzz when it becomes your turn and when your token gets captured. */
-function useHaptics(state: AnyState | null, room: RoomView | null, clientId: string) {
+/** A little buzz when it becomes one of this device's players' turn. */
+function useTurnHaptic(turn: number | null, room: RoomView | null, clientId: string) {
   const lastTurn = useRef<number | null>(null);
   useEffect(() => {
-    if (Platform.OS === 'web' || !state || !room) return;
-    const mine = (seat: number) => room.seats[seat]?.ownerId === clientId;
-    const turn = state.over ? null : state.turn;
-    if (turn != null && turn !== lastTurn.current && mine(turn)) {
+    if (Platform.OS === 'web' || !room) return;
+    if (turn != null && turn !== lastTurn.current && room.seats[turn]?.ownerId === clientId) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     lastTurn.current = turn;
-    const last = 'tokens' in state ? state.last : null;
-    if (last?.captured?.some((c) => mine(c.seat))) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    }
-  }, [state, room, clientId]);
-}
-
-function describeLast(room: RoomView, state: AnyState): string {
-  const name = (seat: number) => room.seats[seat]?.name ?? 'Player';
-  if ('tokens' in state) {
-    const last = state.last;
-    if (state.phase === 'move' && state.dice) return `${name(state.turn)} rolled ${state.dice}`;
-    if (!last) return 'Roll a 6 to bring a token out.';
-    if (last.note === 'three-sixes') return `${name(last.seat)} rolled three 6s — turn over`;
-    if (last.note === 'no-move') return `${name(last.seat)} rolled ${last.dice} — no move`;
-    if (last.captured?.length) return `${name(last.seat)} captured ${name(last.captured[0].seat)}! 💥`;
-    if (last.note === 'finished') return `${name(last.seat)} got a token home! 🏠`;
-    return `${name(last.seat)} moved ${last.dice}`;
-  }
-  const last = state.last;
-  if (!last) return 'First to land exactly on 100 wins.';
-  const who = name(last.seat);
-  if (last.via === 'ladder') return `${who} rolled ${last.dice} and climbed to ${last.to}! 🪜`;
-  if (last.via === 'snake') return `${who} rolled ${last.dice} — snake! Down to ${last.to} 🐍`;
-  if (last.via === 'overshoot') return `${who} rolled ${last.dice} — needs an exact roll`;
-  return `${who} rolled ${last.dice} → ${last.to}`;
-}
-
-function turnHint(state: AnyState, room: RoomView, myTurn: boolean, sharedDevice: boolean): string {
-  if (state.over) return '';
-  const seat = room.seats[state.turn];
-  if (!myTurn)
-    return seat?.bot ? 'Computer is thinking…' : seat?.connected === false ? 'Offline — waiting…' : 'Their turn';
-  if ('tokens' in state && state.phase === 'move') return 'Tap a glowing token';
-  return sharedDevice ? `Pass to ${seat.name} · tap the dice` : 'Your turn · tap the dice';
-}
-
-function progressLabel(state: AnyState, seat: number): string {
-  if ('tokens' in state) {
-    const home = state.tokens[seat].filter((p) => p === HOME).length;
-    const place = state.rankings.indexOf(seat);
-    return place >= 0 && home === 4 ? `#${place + 1}` : `${home}/4 home`;
-  }
-  const pos = state.positions[seat];
-  return pos === 0 ? 'start' : `on ${pos}`;
+  }, [turn, room, clientId]);
 }
 
 const styles = StyleSheet.create({
@@ -267,7 +226,7 @@ const styles = StyleSheet.create({
   panelWide: { width: 340 },
   turnCard: { gap: 12, padding: 14 },
   event: { color: colors.text, fontSize: 15, fontWeight: '600', minHeight: 20 },
-  diceRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  turnRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   turnName: { fontSize: 20, fontWeight: '900' },
   turnHint: { color: colors.muted, fontSize: 14, marginTop: 2 },
   playersCard: { padding: 8 },
@@ -291,7 +250,8 @@ const styles = StyleSheet.create({
   dialogTitle: { color: colors.text, fontSize: 22, fontWeight: '900', textAlign: 'center', marginBottom: 8 },
   rank: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
   rankPlace: { color: colors.muted, fontWeight: '800', width: 20, textAlign: 'center' },
-  rankName: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  rankName: { flex: 1, color: colors.text, fontSize: 16, fontWeight: '600' },
+  rankDetail: { color: colors.muted, fontSize: 13 },
   dialogBtn: { marginTop: 14 },
   dialogBtnSmall: { marginTop: 8 },
 });

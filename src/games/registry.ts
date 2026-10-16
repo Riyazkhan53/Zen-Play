@@ -1,3 +1,4 @@
+import { chess } from './chess/engine';
 import { ludo } from './ludo/engine';
 import { snakes } from './snakes/engine';
 import { GameDef, GameId } from './types';
@@ -38,7 +39,7 @@ export const GAMES: GameMeta[] = [
     players: '2 players',
     emoji: '♟️',
     colors: ['#64748B', '#334155'],
-    available: false,
+    available: true,
   },
   {
     id: 'carrom',
@@ -73,6 +74,7 @@ export const GAMES: GameMeta[] = [
 export const ENGINES: Partial<Record<GameId, GameDef<any, any>>> = {
   ludo,
   snakes,
+  chess,
 };
 
 export function gameMeta(id: string): GameMeta | undefined {
