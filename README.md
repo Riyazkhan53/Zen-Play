@@ -9,7 +9,7 @@ Multiplayer board and card games for **Android, iOS, iPad and the web**, built w
 | ♟️ Chess (2) | ✅ Playable |
 | 🎯 Carrom (2, or 4 in teams) | ✅ Playable |
 | 🃏 UNO (2–8) | ✅ Playable |
-| ♠️ Rummy | Planned |
+| ♠️ Rummy — 13-card Indian (2–6) | ✅ Playable |
 
 ## Ways to play
 

@@ -1,6 +1,7 @@
 import { carrom } from './carrom/engine';
 import { chess } from './chess/engine';
 import { ludo } from './ludo/engine';
+import { rummy } from './rummy/engine';
 import { snakes } from './snakes/engine';
 import { uno } from './uno/engine';
 import { GameDef, GameId } from './types';
@@ -64,11 +65,11 @@ export const GAMES: GameMeta[] = [
   {
     id: 'rummy',
     name: 'Rummy',
-    tagline: 'Build sets and sequences',
+    tagline: '13-card Indian Rummy',
     players: '2–6 players',
     emoji: '♠️',
     colors: ['#7C3AED', '#4338CA'],
-    available: false,
+    available: true,
   },
 ];
 
@@ -79,6 +80,7 @@ export const ENGINES: Partial<Record<GameId, GameDef<any, any>>> = {
   chess,
   carrom,
   uno,
+  rummy,
 };
 
 export function gameMeta(id: string): GameMeta | undefined {
