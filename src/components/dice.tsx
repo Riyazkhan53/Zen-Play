@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, Text, View } from 'react-native';
 
-import { colors } from '@/ui/theme';
+import { makeStyles } from '@/ui/theme';
 
 // Pip positions on a 3×3 grid for each face.
 const PIPS: Record<number, [number, number][]> = {
@@ -57,6 +57,7 @@ export function Dice({
   onRoll: () => void;
   size?: number;
 }) {
+  const styles = useStyles();
   const [spin] = useState(() => new Animated.Value(0));
   const [pulse] = useState(() => new Animated.Value(0));
 
@@ -138,7 +139,7 @@ export function Dice({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   die: {
     backgroundColor: '#fff',
     borderWidth: 3,
@@ -147,6 +148,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
   },
   grid: { position: 'absolute' },
-  pip: { position: 'absolute', backgroundColor: colors.bg },
-  tap: { color: colors.bg, fontWeight: '900', letterSpacing: 1 },
-});
+  // Dice faces are always white with dark pips, whatever the app theme.
+  pip: { position: 'absolute', backgroundColor: '#0B1220' },
+  tap: { color: '#0B1220', fontWeight: '900', letterSpacing: 1 },
+}));

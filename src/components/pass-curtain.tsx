@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { Button } from '@/components/ui';
-import { colors, radius } from '@/ui/theme';
+import { makeStyles, radius } from '@/ui/theme';
 
 /**
  * Which hand this device should show, for card games.
@@ -18,6 +18,7 @@ export function useHandToShow(mySeats: number[], turn: number | null) {
 }
 
 export function PassCurtain({ name, onReveal }: { name: string; onReveal: () => void }) {
+  const styles = useStyles();
   return (
     <View style={styles.curtain}>
       <Text style={styles.emoji}>🙈</Text>
@@ -28,7 +29,7 @@ export function PassCurtain({ name, onReveal }: { name: string; onReveal: () => 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   curtain: {
     alignItems: 'center',
     gap: 6,
@@ -42,4 +43,4 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 18, fontWeight: '800', textAlign: 'center' },
   text: { color: colors.muted, fontSize: 14 },
   button: { marginTop: 10, alignSelf: 'stretch' },
-});
+}));

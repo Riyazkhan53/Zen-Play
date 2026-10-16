@@ -1,18 +1,21 @@
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Modal, Platform, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 import { Banner, Button, Card, Screen, TopBar } from '@/components/ui';
 import { GAME_UI } from '@/game-ui';
 import { ENGINES, gameMeta } from '@/games/registry';
 import { useProfile } from '@/lib/profile';
+import { recordGame } from '@/lib/stats';
 import type { RoomView } from '@/net/protocol';
 import { clearError, leaveSession, send, useSession } from '@/net/session';
 import { seatColor } from '@/ui/seat-colors';
-import { colors, MAX_WIDTH, radius } from '@/ui/theme';
+import { makeStyles, MAX_WIDTH, radius, useTheme } from '@/ui/theme';
 
 export default function Play() {
+  const styles = useStyles();
+  const colors = useTheme();
   const session = useSession();
   const { clientId } = useProfile();
   const { width, height } = useWindowDimensions();
@@ -36,6 +39,21 @@ export default function Play() {
   useTurnHaptic(turn, room, clientId);
 
   const ui = room ? GAME_UI[room.gameId] : undefined;
+
+  // Count the finished game in this player's stats (once per game).
+  useEffect(() => {
+    if (!room || state == null || !engine || !ui || !room.started || engine.currentSeat(state) != null) return;
+    const mine = room.seats.flatMap((s, i) => (s.ownerId === clientId ? [i] : []));
+    if (!mine.length) return;
+    const draw = ui.isDraw?.(state) ?? false;
+    recordGame(`${room.code ?? room.hostClientId}:${room.gameId}:${session.seq}`, {
+      gameId: room.gameId,
+      won: !draw && mine.includes(engine.rankings(state)[0]),
+      draw,
+      players: room.seats.length,
+      mode: session.mode === 'online' ? 'online' : session.mode === 'local' ? 'local' : 'lan',
+    });
+  }, [room, state, engine, ui, clientId, session.seq, session.mode]);
   if (!room || state == null || !engine || !ui) {
     return (
       <Screen>
@@ -208,7 +226,7 @@ function useTurnHaptic(turn: number | null, room: RoomView | null, clientId: str
   }, [turn, room, clientId]);
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   flex: { flex: 1 },
   muted: { color: colors.muted, fontSize: 14, textAlign: 'center' },
   reconnecting: { color: colors.warning, textAlign: 'center', marginBottom: 6 },
@@ -254,4 +272,4 @@ const styles = StyleSheet.create({
   rankDetail: { color: colors.muted, fontSize: 13 },
   dialogBtn: { marginTop: 14 },
   dialogBtnSmall: { marginTop: 8 },
-});
+}));

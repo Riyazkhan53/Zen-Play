@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { LayoutChangeEvent, PanResponder, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, PanResponder, Text, View } from 'react-native';
 
-import { colors } from '@/ui/theme';
+import { makeStyles, useTheme } from '@/ui/theme';
 
 /** Minimal 0..1 slider (drag or tap the track); works on native and web. */
 export function Slider({
   label,
   value,
   onChange,
-  color = colors.accent,
+  color: colorProp,
   disabled,
 }: {
   label: string;
@@ -17,6 +17,9 @@ export function Slider({
   color?: string;
   disabled?: boolean;
 }) {
+  const styles = useStyles();
+  const colors = useTheme();
+  const color = colorProp ?? colors.accent;
   const [width, setWidth] = useState(1);
   const clamp = (x: number) => Math.min(1, Math.max(0, x / width));
 
@@ -50,11 +53,11 @@ export function Slider({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: { flex: 1, gap: 4 },
   label: { color: colors.muted, fontSize: 12, fontWeight: '700' },
   track: { height: 32, justifyContent: 'center', backgroundColor: colors.surfaceAlt, borderRadius: 16 },
   rail: { position: 'absolute', left: 0, height: 32, borderRadius: 16, opacity: 0.35 },
   thumb: { position: 'absolute', width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff', borderWidth: 3 },
   disabled: { opacity: 0.4 },
-});
+}));

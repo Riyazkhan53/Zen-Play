@@ -1,14 +1,15 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 import { Banner, Button, Card, Input, Screen, TopBar } from '@/components/ui';
 import { gameMeta } from '@/games/registry';
 import { lanSupported } from '@/net/lan';
 import { clearError, createOnline, hostLan, joinLan, joinOnline, startLocal, useSession } from '@/net/session';
-import { colors } from '@/ui/theme';
+import { makeStyles } from '@/ui/theme';
 
 export default function GameModes() {
+  const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
   const game = gameMeta(id);
   const session = useSession();
@@ -124,7 +125,7 @@ export default function GameModes() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   flex: { flex: 1 },
   // Inputs beside a button must be allowed to shrink, or they push the button out.
   rowInput: { flex: 1, minWidth: 0 },
@@ -140,4 +141,4 @@ const styles = StyleSheet.create({
   action: { marginTop: 16 },
   secondaryAction: { marginTop: 10 },
   row: { flexDirection: 'row', gap: 10, marginTop: 12 },
-});
+}));

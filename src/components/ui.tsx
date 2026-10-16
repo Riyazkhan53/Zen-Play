@@ -1,19 +1,11 @@
 import { ReactNode } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  TextInputProps,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, MAX_WIDTH, radius } from '@/ui/theme';
+import { Colors, makeStyles, MAX_WIDTH, radius, useTheme } from '@/ui/theme';
 
 export function Screen({ children, style }: { children: ReactNode; style?: ViewStyle }) {
+  const styles = useStyles();
   return (
     <SafeAreaView style={styles.screen}>
       <View style={[styles.screenInner, style]}>{children}</View>
@@ -40,7 +32,9 @@ export function Button({
   icon?: string;
   style?: ViewStyle;
 }) {
-  const v = VARIANTS[variant];
+  const styles = useStyles();
+  const colors = useTheme();
+  const v = variants(colors)[variant];
   return (
     <Pressable
       onPress={onPress}
@@ -66,22 +60,26 @@ export function Button({
   );
 }
 
-const VARIANTS: Record<ButtonVariant, { bg: string; border: string; text: string }> = {
+const variants = (colors: Colors): Record<ButtonVariant, { bg: string; border: string; text: string }> => ({
   primary: { bg: colors.accent, border: colors.accent, text: colors.accentText },
   secondary: { bg: colors.surfaceAlt, border: colors.border, text: colors.text },
   ghost: { bg: 'transparent', border: colors.border, text: colors.muted },
   danger: { bg: 'transparent', border: colors.danger, text: colors.danger },
-};
+});
 
 export function Input(props: TextInputProps) {
+  const styles = useStyles();
+  const colors = useTheme();
   return <TextInput placeholderTextColor={colors.faint} {...props} style={[styles.input, props.style]} />;
 }
 
 export function Card({ children, style }: { children: ReactNode; style?: ViewStyle }) {
+  const styles = useStyles();
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
 export function Banner({ message, onClose }: { message: string; onClose?: () => void }) {
+  const styles = useStyles();
   return (
     <Pressable onPress={onClose} style={styles.banner} accessibilityRole="alert">
       <Text style={styles.bannerText}>{message}</Text>
@@ -91,6 +89,7 @@ export function Banner({ message, onClose }: { message: string; onClose?: () => 
 }
 
 export function TopBar({ title, onBack, right }: { title: string; onBack?: () => void; right?: ReactNode }) {
+  const styles = useStyles();
   return (
     <View style={styles.topBar}>
       {onBack ? (
@@ -108,7 +107,7 @@ export function TopBar({ title, onBack, right }: { title: string; onBack?: () =>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   screenInner: { flex: 1, width: '100%', maxWidth: MAX_WIDTH, alignSelf: 'center', paddingHorizontal: 16 },
   button: {
@@ -157,4 +156,4 @@ const styles = StyleSheet.create({
   backText: { color: colors.text, fontSize: 34, lineHeight: 38, marginTop: -4 },
   topTitle: { flex: 1, color: colors.text, fontSize: 20, fontWeight: '800', textAlign: 'center' },
   topRight: { minWidth: 40, alignItems: 'flex-end' },
-});
+}));

@@ -6,10 +6,11 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Button, Screen, TopBar } from '@/components/ui';
 import { joinLan, joinOnline } from '@/net/session';
-import { colors, radius } from '@/ui/theme';
+import { makeStyles, radius } from '@/ui/theme';
 
 /** Scan the QR code shown on the host's lobby screen. */
 export default function Scan() {
+  const styles = useStyles();
   const [permission, requestPermission] = useCameraPermissions();
   const handled = useRef(false);
 
@@ -49,7 +50,7 @@ export default function Scan() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 },
   text: { color: colors.text, fontSize: 16, textAlign: 'center' },
   allow: { minWidth: 180 },
@@ -74,4 +75,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     overflow: 'hidden',
   },
-});
+}));

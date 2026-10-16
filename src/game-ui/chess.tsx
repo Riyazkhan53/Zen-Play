@@ -1,9 +1,9 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { ChessBoard, pieceGlyph } from '@/components/chess-board';
 import { Button } from '@/components/ui';
 import { ChessState, seatColor } from '@/games/chess/engine';
-import { colors } from '@/ui/theme';
+import { makeStyles } from '@/ui/theme';
 
 import type { GameUI } from './types';
 
@@ -29,6 +29,7 @@ export const chessUI: GameUI<ChessState> = {
     />
   ),
   Controls: ({ state, mySeats, act }) => {
+    const styles = useStyles();
     // When both colours are on this device, "Resign" is for whoever is to move.
     const resigner = mySeats.length === 1 ? mySeats[0] : mySeats.includes(state.turn) ? state.turn : null;
     const taken = (color: 'w' | 'b') =>
@@ -72,8 +73,8 @@ export const chessUI: GameUI<ChessState> = {
   },
 };
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   controls: { flex: 1, gap: 4 },
   captured: { color: colors.muted, fontSize: 18, letterSpacing: 1 },
   resign: { minHeight: 36, marginTop: 4, alignSelf: 'flex-start' },
-});
+}));

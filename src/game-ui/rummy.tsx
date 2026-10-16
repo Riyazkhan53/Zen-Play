@@ -5,7 +5,7 @@ import { shortName } from '@/components/playing-card';
 import { RummyTable } from '@/components/rummy/table';
 import { Input } from '@/components/ui';
 import { modeLabel, normaliseOptions, RummyMode, RummyOptions, RummyState } from '@/games/rummy/engine';
-import { colors, radius } from '@/ui/theme';
+import { makeStyles, radius } from '@/ui/theme';
 
 import type { GameOptionsProps, GameUI } from './types';
 
@@ -31,6 +31,7 @@ function Chip({
   onPress: () => void;
   disabled?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -46,6 +47,7 @@ function Chip({
 
 /** Lobby picker for the match format. Only the host can change it. */
 function RummyOptionsPicker({ options, isHost, onChange }: GameOptionsProps) {
+  const styles = useStyles();
   let current: Required<RummyOptions>;
   try {
     current = normaliseOptions(options);
@@ -124,18 +126,21 @@ export const rummyUI: GameUI<RummyState> = {
   shape: 'table',
   Board: RummyTable,
   Options: RummyOptionsPicker,
-  Controls: ({ state }) => (
-    <View style={styles.controls}>
-      <Text style={styles.mode}>{modeLabel(state.options)}</Text>
-      <Text style={styles.round}>
-        {state.totalRounds ? `Deal ${state.round} of ${state.totalRounds}` : `Deal ${state.round}`}
-        {state.multiplier > 1 ? ' · ×2' : ''}
-      </Text>
-      <Text style={styles.joker}>
-        {state.wildCard ? `Joker: ${shortName(state.wildCard).slice(0, -1)}s` : 'Joker: hidden'}
-      </Text>
-    </View>
-  ),
+  Controls: ({ state }) => {
+    const styles = useStyles();
+    return (
+      <View style={styles.controls}>
+        <Text style={styles.mode}>{modeLabel(state.options)}</Text>
+        <Text style={styles.round}>
+          {state.totalRounds ? `Deal ${state.round} of ${state.totalRounds}` : `Deal ${state.round}`}
+          {state.multiplier > 1 ? ' · ×2' : ''}
+        </Text>
+        <Text style={styles.joker}>
+          {state.wildCard ? `Joker: ${shortName(state.wildCard).slice(0, -1)}s` : 'Joker: hidden'}
+        </Text>
+      </View>
+    );
+  },
   status(state, room) {
     if (state.phase === 'roundOver') {
       const r = state.history[state.history.length - 1];
@@ -175,7 +180,7 @@ export const rummyUI: GameUI<RummyState> = {
   },
 };
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   controls: { minWidth: 110, gap: 2 },
   mode: { color: colors.text, fontWeight: '900', fontSize: 14 },
   round: { color: colors.muted, fontSize: 12, fontWeight: '700' },
@@ -203,4 +208,4 @@ const styles = StyleSheet.create({
   chipText: { color: colors.text, fontWeight: '700', fontSize: 14 },
   chipTextOn: { color: colors.accentText },
   customInput: { width: 100, minHeight: 40, borderRadius: radius.md },
-});
+}));

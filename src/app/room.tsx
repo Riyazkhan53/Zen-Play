@@ -19,9 +19,11 @@ import { gameMeta } from '@/games/registry';
 import { getProfile, useProfile } from '@/lib/profile';
 import { clearError, leaveSession, send, useSession } from '@/net/session';
 import { seatColor } from '@/ui/seat-colors';
-import { colors, radius } from '@/ui/theme';
+import { makeStyles, radius, useTheme } from '@/ui/theme';
 
 export default function Room() {
+  const styles = useStyles();
+  const colors = useTheme();
   const session = useSession();
   const { clientId } = useProfile();
   const { width } = useWindowDimensions();
@@ -202,7 +204,7 @@ export default function Room() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   flex: { flex: 1 },
   rowInput: { flex: 1, minWidth: 0 },
   scroll: { paddingBottom: 40 },
@@ -239,4 +241,4 @@ const styles = StyleSheet.create({
   addBot: { marginTop: 10 },
   start: { marginTop: 18 },
   waiting: { marginTop: 18 },
-});
+}));

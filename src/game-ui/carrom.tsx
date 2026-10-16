@@ -1,8 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { CarromBoard } from '@/components/carrom-board';
 import { CarromState, sideOf, teamColor } from '@/games/carrom/engine';
-import { colors } from '@/ui/theme';
+import { makeStyles } from '@/ui/theme';
 
 import type { GameUI } from './types';
 
@@ -33,13 +33,16 @@ export const carromUI: GameUI<CarromState> = {
       />
     );
   },
-  Controls: ({ state }) => (
-    <View style={styles.score}>
-      <Text style={styles.scoreLine}>⚪ {state.pocketed.white}/9</Text>
-      <Text style={styles.scoreLine}>⚫ {state.pocketed.black}/9</Text>
-      <Text style={styles.queen}>{queenText(state)}</Text>
-    </View>
-  ),
+  Controls: ({ state }) => {
+    const styles = useStyles();
+    return (
+      <View style={styles.score}>
+        <Text style={styles.scoreLine}>⚪ {state.pocketed.white}/9</Text>
+        <Text style={styles.scoreLine}>⚫ {state.pocketed.black}/9</Text>
+        <Text style={styles.queen}>{queenText(state)}</Text>
+      </View>
+    );
+  },
   status: (state) => state.last?.message ?? 'Break the centre to start. Pocket your colour, then cover the queen.',
   hint: () => 'Aim, set power, then Strike',
   detail(state, seat) {
@@ -52,8 +55,8 @@ export const carromUI: GameUI<CarromState> = {
       : `${state.seats.length === 2 ? room.seats[state.winnerTeam]?.name : teamName(state, state.winnerTeam)} wins! +${state.points} points`,
 };
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   score: { minWidth: 90, gap: 2 },
   scoreLine: { color: colors.text, fontSize: 16, fontWeight: '800' },
   queen: { color: '#F87171', fontSize: 12, fontWeight: '700' },
-});
+}));

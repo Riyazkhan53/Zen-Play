@@ -1,11 +1,11 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { ReactNode, useEffect, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Easing, Pressable, Text, useWindowDimensions, View } from 'react-native';
 
 import { dropCost, modeLabel, RummyState } from '@/games/rummy/engine';
 import { arrange, classify, isJoker, PlayingCard } from '@/games/rummy/melds';
 import type { RoomView } from '@/net/protocol';
-import { colors, PLAYER_COLORS, radius } from '@/ui/theme';
+import { makeStyles, PLAYER_COLORS, radius, useTheme } from '@/ui/theme';
 
 import { PassCurtain, useHandToShow } from '../pass-curtain';
 import { PlayingCardView, shortName } from '../playing-card';
@@ -58,6 +58,7 @@ export function RummyTable({
   seq: number;
   act: (seat: number, move: unknown) => void;
 }) {
+  const styles = useStyles();
   const window = useWindowDimensions();
   const turn = state.over || state.phase === 'roundOver' ? null : state.turn;
   const { seat: handSeat, covered, reveal } = useHandToShow(mySeats, turn);
@@ -359,6 +360,8 @@ function Seat({
   dealer: boolean;
   status: 'out' | 'dropped' | 'bot' | null;
 }) {
+  const styles = useStyles();
+  const colors = useTheme();
   const [pulse] = useState(() => new Animated.Value(0));
   useEffect(() => {
     if (!active) return;
@@ -406,6 +409,7 @@ function Seat({
 }
 
 function Glow({ width }: { width: number }) {
+  const styles = useStyles();
   const [p] = useState(() => new Animated.Value(0));
   useEffect(() => {
     const loop = Animated.loop(
@@ -453,6 +457,7 @@ function RoundResults({
   mySeats: number[];
   act: (seat: number, move: unknown) => void;
 }) {
+  const styles = useStyles();
   const result = state.history[state.history.length - 1];
   const winner = room.seats[result.winner]?.name ?? 'Player';
   const order = state.seats.map((_, i) => i).sort((a, b) => state.totals[a] - state.totals[b]);
@@ -491,7 +496,7 @@ function RoundResults({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   abs: { position: 'absolute', left: 0, top: 0 },
   flex: { flex: 1 },
   felt: { position: 'absolute', left: 10, top: 10, right: 10, bottom: 10 },
@@ -607,4 +612,4 @@ const styles = StyleSheet.create({
   resultsName: { flex: 1, textAlign: 'left' },
   dot: { width: 12, height: 12, borderRadius: 6 },
   nextBtn: { marginTop: 10 },
-});
+}));

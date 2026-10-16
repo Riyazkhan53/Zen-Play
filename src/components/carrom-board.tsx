@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { PanResponder, StyleSheet, Text, View } from 'react-native';
+import { PanResponder, Text, View } from 'react-native';
 import Svg, { Circle, G, Line, Rect } from 'react-native-svg';
 
 import { Button } from '@/components/ui';
@@ -17,7 +17,7 @@ import {
   strikerFits,
   strikerSpot,
 } from '@/games/carrom/engine';
-import { colors } from '@/ui/theme';
+import { makeStyles, useTheme } from '@/ui/theme';
 
 import { Slider } from './slider';
 
@@ -65,6 +65,8 @@ export function CarromBoard({
   canShoot: boolean;
   onShoot: (move: CarromMove) => void;
 }) {
+  const styles = useStyles();
+  const colors = useTheme();
   const turns = viewerSide;
   const scale = size / (BOARD + FRAME * 2);
   const side = sideOf(state.turn, state.seats.length);
@@ -240,8 +242,8 @@ export function CarromBoard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   controls: { gap: 10, paddingTop: 12, paddingHorizontal: 4, paddingBottom: 4 },
   tip: { color: colors.muted, fontSize: 13, textAlign: 'center' },
   row: { flexDirection: 'row', gap: 14 },
-});
+}));

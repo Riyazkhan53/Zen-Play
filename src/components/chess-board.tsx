@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ChessState, legalMoves, Move, Piece, Promotion, seatColor } from '@/games/chess/engine';
-import { colors, radius } from '@/ui/theme';
+import { makeStyles, radius } from '@/ui/theme';
 
 // Filled glyphs for both sides (coloured by style); U+FE0E keeps iOS from
 // drawing them as emoji.
@@ -13,6 +13,7 @@ const LIGHT = '#F0D9B5';
 const DARK = '#B58863';
 
 export function ChessPiece({ piece, size }: { piece: Piece; size: number }) {
+  const styles = useStyles();
   const white = piece[0] === 'w';
   return (
     <Text
@@ -49,6 +50,7 @@ export function ChessBoard({
   flipped: boolean;
   onMove: (move: Move) => void;
 }) {
+  const styles = useStyles();
   const [selected, setSelected] = useState<number | null>(null);
   const [promotionChoices, setPromotionChoices] = useState<Move[] | null>(null);
   const cell = size / 8;
@@ -158,7 +160,7 @@ export function ChessBoard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   board: { flexDirection: 'row', flexWrap: 'wrap', borderRadius: 6, overflow: 'hidden' },
   square: { alignItems: 'center', justifyContent: 'center' },
   piece: { textAlign: 'center', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 2 },
@@ -186,4 +188,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

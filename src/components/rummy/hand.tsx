@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, LayoutRectangle, PanResponder, StyleSheet, Text, View } from 'react-native';
+import { Animated, LayoutRectangle, PanResponder, Text, View } from 'react-native';
 
 import { classify, isJoker, PlayingCard } from '@/games/rummy/melds';
-import { colors, radius } from '@/ui/theme';
+import { makeStyles, radius, useTheme } from '@/ui/theme';
 
 import { PlayingCardView } from '../playing-card';
 
@@ -35,6 +35,8 @@ export interface HandProps {
  * one); drag it up onto the table to discard.
  */
 export function RummyHand(props: HandProps) {
+  const styles = useStyles();
+  const colors = useTheme();
   const { cards, groups, wildRank, cardWidth, selected } = props;
   const byId = new Map(cards.map((c) => [c.id, c]));
   const rects = useRef(new Map<number, LayoutRectangle>());
@@ -134,6 +136,7 @@ function DraggableCard({
   onPress?: () => void;
   onDrop: (dx: number, dy: number) => boolean;
 }) {
+  const styles = useStyles();
   const [pan] = useState(() => new Animated.ValueXY());
   const [lift] = useState(() => new Animated.Value(0));
   const [dragging, setDragging] = useState(false);
@@ -187,7 +190,7 @@ function DraggableCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 14 },
   group: {
     padding: PAD,
@@ -205,4 +208,4 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 8 },
   },
-});
+}));

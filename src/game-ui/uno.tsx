@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 
 import { PassCurtain, useHandToShow } from '@/components/pass-curtain';
 import { Button } from '@/components/ui';
 import { UNO_HEX, UnoCardView, unoCardName } from '@/components/uno-card';
 import { canPlay, UNO_COLORS, UnoCard, UnoColor, UnoState } from '@/games/uno/engine';
-import { colors, radius } from '@/ui/theme';
+import { makeStyles, radius } from '@/ui/theme';
 
 import type { GameUI, GameUIProps } from './types';
 
 function UnoTable({ state, room, size, mySeats, act }: GameUIProps<UnoState>) {
+  const styles = useStyles();
   const turn = state.over ? null : state.turn;
   const { seat: handSeat, covered, reveal } = useHandToShow(mySeats, turn);
   const [callUno, setCallUno] = useState(false);
@@ -161,7 +162,7 @@ export const unoUI: GameUI<UnoState> = {
   result: (state, room) => `${room.seats[state.rankings[0]]?.name} wins! +${state.points} points`,
 };
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   opponents: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   opponent: {
     flexDirection: 'row',
@@ -206,4 +207,4 @@ const styles = StyleSheet.create({
   pickerTitle: { color: colors.text, fontSize: 18, fontWeight: '800', textAlign: 'center' },
   pickerGrid: { flexDirection: 'row', gap: 10 },
   swatch: { width: 56, height: 56, borderRadius: 28, borderWidth: 3, borderColor: '#fff' },
-});
+}));
