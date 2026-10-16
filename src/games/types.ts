@@ -25,6 +25,12 @@ export interface GameDef<S = unknown, M = unknown> {
   botMove(state: S, seat: number, rng: Rng): M;
   /** Seats in finishing order (winner first) once the game is over. */
   rankings(state: S): number[];
+  /**
+   * What a device controlling `seats` may see. Games with hidden information
+   * (card hands, the deck order) blank out everything else; the host only
+   * ever sends this view, so other players' cards never leave the host.
+   */
+  viewFor?(state: S, seats: number[]): S;
 }
 
 export const rollDie = (rng: Rng) => 1 + Math.floor(rng() * 6);

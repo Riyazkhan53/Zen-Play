@@ -78,7 +78,7 @@ export class RoomHost {
       }
     }
     this.broadcastRoom();
-    if (this.started) send({ t: 'state', state: this.state, seq: this.seq });
+    if (this.started) this.sendState(peer);
     return {
       receive: (msg) => this.handle(peer, msg),
       disconnect: () => {
@@ -168,6 +168,8 @@ export class RoomHost {
         if (!seat) throw new IllegalMoveError('No such seat');
         this.seats[msg.seat] = { name: `${seat.name} (bot)`, ownerId: null, bot: true };
         this.broadcastRoom();
+        // The previous owner must stop seeing that seat's hidden cards.
+        if (this.started) for (const peer of this.peers) this.sendState(peer);
         this.scheduleBot();
         return;
       }
@@ -178,7 +180,7 @@ export class RoomHost {
 
   private afterChange() {
     this.seq += 1;
-    this.broadcast({ t: 'state', state: this.state, seq: this.seq });
+    for (const peer of this.peers) this.sendState(peer);
     this.broadcastRoom();
     this.scheduleBot();
   }
@@ -233,6 +235,17 @@ export class RoomHost {
       maxPlayers: this.engine.maxPlayers,
       started: this.started,
     };
+  }
+
+  /** Each peer gets only what its own seats may see (hidden hands stay on the host). */
+  private sendState(peer: Peer) {
+    const seats = this.seats.flatMap((s, i) => (s.ownerId === peer.clientId ? [i] : []));
+    const state = this.engine.viewFor ? this.engine.viewFor(this.state, seats) : this.state;
+    try {
+      peer.send({ t: 'state', state, seq: this.seq });
+    } catch {
+      // A broken connection is cleaned up by its own close handler.
+    }
   }
 
   private broadcastRoom() {

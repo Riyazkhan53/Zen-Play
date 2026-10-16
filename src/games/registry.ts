@@ -2,6 +2,7 @@ import { carrom } from './carrom/engine';
 import { chess } from './chess/engine';
 import { ludo } from './ludo/engine';
 import { snakes } from './snakes/engine';
+import { uno } from './uno/engine';
 import { GameDef, GameId } from './types';
 
 export interface GameMeta {
@@ -58,7 +59,7 @@ export const GAMES: GameMeta[] = [
     players: '2–8 players',
     emoji: '🃏',
     colors: ['#EF4444', '#2563EB'],
-    available: false,
+    available: true,
   },
   {
     id: 'rummy',
@@ -77,6 +78,7 @@ export const ENGINES: Partial<Record<GameId, GameDef<any, any>>> = {
   snakes,
   chess,
   carrom,
+  uno,
 };
 
 export function gameMeta(id: string): GameMeta | undefined {

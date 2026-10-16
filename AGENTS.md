@@ -48,8 +48,11 @@ Docs: https://docs.expo.dev/eas/index.md
   (`ENGINES` + flip `available` in `GAMES`).
 - **All multiplayer goes through `RoomHost`** (`src/net/room-host.ts`) — the online server, the Wi-Fi host
   phone and same-device play all use it. Don't add game logic to screens or transports.
-- Card games (UNO, Rummy) will need per-seat views so hands stay hidden: add a `viewFor(state, seat)` to
-  `GameDef` and have `RoomHost` send each peer only its view.
+- Hidden information: implement `viewFor(state, seats)` on the engine (see UNO). `RoomHost` sends each
+  peer only the view for the seats it owns, so other hands and the deck order never leave the host.
+  Card UIs use `useHandToShow`/`PassCurtain` so players sharing a device can't see each other's cards.
+- Each game also has a UI module in `src/game-ui/<game>.tsx` (board, controls, status text) registered
+  in `src/game-ui/index.ts`; `src/app/play.tsx` is shared and shouldn't need game-specific code.
 - `src/net/lan.native.ts` is native-only (TCP); `src/net/lan.ts` is the web stub. Keep their exports in sync.
 - Shared code under `src/games` and `src/net` is imported by `server/` — use relative imports there, not `@/`.
 - Run `npm test`, `npm run typecheck` and `npm run lint` before finishing. In this sandbox, prefix Expo
