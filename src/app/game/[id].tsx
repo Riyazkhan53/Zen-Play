@@ -66,7 +66,7 @@ export default function GameModes() {
                   autoCapitalize="characters"
                   autoCorrect={false}
                   maxLength={5}
-                  style={styles.flex}
+                  style={styles.rowInput}
                   accessibilityLabel="Room code"
                 />
                 <Button
@@ -100,7 +100,7 @@ export default function GameModes() {
                       placeholder="Host address, e.g. 192.168.1.5"
                       keyboardType="numbers-and-punctuation"
                       autoCorrect={false}
-                      style={styles.flex}
+                      style={styles.rowInput}
                       accessibilityLabel="Host address"
                     />
                     <Button
@@ -126,6 +126,8 @@ export default function GameModes() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  // Inputs beside a button must be allowed to shrink, or they push the button out.
+  rowInput: { flex: 1, minWidth: 0 },
   scroll: { paddingBottom: 40 },
   subtitle: { color: colors.muted, fontSize: 15, textAlign: 'center', marginBottom: 18 },
   muted: { color: colors.muted, textAlign: 'center', marginTop: 40 },

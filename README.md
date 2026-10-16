@@ -7,7 +7,7 @@ Multiplayer board and card games for **Android, iOS, iPad and the web**, built w
 | 🎲 Ludo (2–4) | ✅ Playable |
 | 🐍 Snakes & Ladders (2–6) | ✅ Playable |
 | ♟️ Chess (2) | ✅ Playable |
-| 🎯 Carrom | Planned |
+| 🎯 Carrom (2, or 4 in teams) | ✅ Playable |
 | 🃏 UNO | Planned |
 | ♠️ Rummy | Planned |
 

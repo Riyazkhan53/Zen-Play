@@ -158,7 +158,7 @@ export default function Room() {
                     placeholder="Add a player on this device"
                     maxLength={20}
                     onSubmitEditing={addLocal}
-                    style={styles.flex}
+                    style={styles.rowInput}
                     accessibilityLabel="New player name"
                   />
                   <Button title="Add" variant="secondary" onPress={addLocal} />
@@ -194,6 +194,7 @@ export default function Room() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  rowInput: { flex: 1, minWidth: 0 },
   scroll: { paddingBottom: 40 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 },
   problem: { color: colors.text, fontSize: 16, textAlign: 'center' },

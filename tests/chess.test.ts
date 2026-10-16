@@ -34,7 +34,12 @@ function fromFen(fen: string): ChessState {
 function play(state: ChessState, ...moves: string[]): ChessState {
   for (const m of moves) {
     const promotion = m[4]?.toUpperCase() as 'Q' | undefined;
-    state = chess.applyMove(state, state.turn, { type: 'move', from: sq(m.slice(0, 2)), to: sq(m.slice(2, 4)), promotion }, Math.random);
+    state = chess.applyMove(
+      state,
+      state.turn,
+      { type: 'move', from: sq(m.slice(0, 2)), to: sq(m.slice(2, 4)), promotion },
+      Math.random,
+    );
   }
   return state;
 }
@@ -79,7 +84,9 @@ test('chess: castling moves the rook and is blocked through check', () => {
   assert.equal(s.castling, 'kq');
 
   const attacked = fromFen('r3k2r/8/8/8/8/8/5r2/R3K2R w KQkq -'); // rook on f2 covers f1
-  const kingMoves = legalMoves(attacked).filter((m) => m.from === sq('e1')).map((m) => squareName(m.to));
+  const kingMoves = legalMoves(attacked)
+    .filter((m) => m.from === sq('e1'))
+    .map((m) => squareName(m.to));
   assert.ok(!kingMoves.includes('g1'));
   assert.ok(kingMoves.includes('c1'));
 });
@@ -114,7 +121,10 @@ test('chess: stalemate, insufficient material and repetition are draws', () => {
 test('chess: illegal moves, moving into check, turn order and resigning', () => {
   const s = chess.setup(seats, Math.random);
   assert.throws(() => play(s, 'e2e5'), IllegalMoveError);
-  assert.throws(() => chess.applyMove(s, 1, { type: 'move', from: sq('e7'), to: sq('e5') }, Math.random), IllegalMoveError);
+  assert.throws(
+    () => chess.applyMove(s, 1, { type: 'move', from: sq('e7'), to: sq('e5') }, Math.random),
+    IllegalMoveError,
+  );
   const pinned = fromFen('4k3/4r3/8/8/8/8/4B3/4K3 w - -');
   assert.ok(!legalMoves(pinned).some((m) => m.from === sq('e2')), 'pinned bishop cannot move');
   const resigned = chess.applyMove(s, 1, { type: 'resign' }, Math.random);
@@ -131,6 +141,7 @@ test('chess: computer player takes a free queen, finds mate in one, and plays le
 
   let s = chess.setup(seats, Math.random);
   const t0 = Date.now();
-  for (let i = 0; i < 40 && !s.over; i++) s = chess.applyMove(s, s.turn, chess.botMove(s, s.turn, Math.random), Math.random);
+  for (let i = 0; i < 40 && !s.over; i++)
+    s = chess.applyMove(s, s.turn, chess.botMove(s, s.turn, Math.random), Math.random);
   assert.ok((Date.now() - t0) / 40 < 500, 'under half a second per move');
 });

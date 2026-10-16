@@ -193,8 +193,26 @@ export class RoomHost {
       this.botTimer = null;
       const current = this.engine.currentSeat(this.state);
       if (current !== seat) return;
-      this.state = this.engine.applyMove(this.state, seat, this.engine.botMove(this.state, seat, this.rng), this.rng);
-      this.afterChange();
+      // Never let a computer player's mistake throw inside a timer (it would take the
+      // server down); retry, since bots are randomised.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          this.state = this.engine.applyMove(
+            this.state,
+            seat,
+            this.engine.botMove(this.state, seat, this.rng),
+            this.rng,
+          );
+          this.afterChange();
+          return;
+        } catch (error) {
+          console.warn(`[room] bot move rejected (${this.gameId}):`, error instanceof Error ? error.message : error);
+        }
+      }
+      this.broadcast({
+        t: 'error',
+        message: `${this.seats[seat]?.name ?? 'Computer'} is stuck. Please restart the game.`,
+      });
     }, this.botDelayMs);
   }
 

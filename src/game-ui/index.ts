@@ -1,5 +1,6 @@
 import type { GameId } from '@/games/types';
 
+import { carromUI } from './carrom';
 import { chessUI } from './chess';
 import { ludoUI } from './ludo';
 import { snakesUI } from './snakes';
@@ -9,4 +10,5 @@ export const GAME_UI: Partial<Record<GameId, GameUI<any>>> = {
   ludo: ludoUI,
   snakes: snakesUI,
   chess: chessUI,
+  carrom: carromUI,
 };
