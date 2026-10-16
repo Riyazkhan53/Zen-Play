@@ -34,9 +34,12 @@ export function PlayingCardView({
   const back = faceDown || !card;
   const red = card && (card.suit === 'H' || card.suit === 'D');
   const ink = red ? '#C62828' : '#111827';
+  // Non-interactive cards are plain Views: a disabled Pressable on the web still
+  // lets its children catch taps, so decorative cards would block the table.
+  const Container = (onPress ? Pressable : View) as typeof Pressable;
 
   return (
-    <Pressable
+    <Container
       onPress={onPress}
       disabled={!onPress}
       accessibilityRole={onPress ? 'button' : undefined}
@@ -77,7 +80,7 @@ export function PlayingCardView({
           ) : null}
         </>
       )}
-    </Pressable>
+    </Container>
   );
 }
 

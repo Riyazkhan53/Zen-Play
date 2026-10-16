@@ -14,9 +14,17 @@ export interface GameUIProps<S> {
   act: (seat: number, move: unknown) => void;
 }
 
+export interface GameOptionsProps {
+  options: unknown;
+  isHost: boolean;
+  onChange: (options: unknown) => void;
+}
+
 /** Everything the shared game screen needs to show one game. */
 export interface GameUI<S> {
   Board: ComponentType<GameUIProps<S>>;
+  /** Lobby settings for the game (e.g. Rummy's match format). */
+  Options?: ComponentType<GameOptionsProps>;
   /** Shown in the turn card beside the player's name (e.g. dice). */
   Controls?: ComponentType<GameUIProps<S>>;
   /** What just happened, e.g. "Asha rolled 6". */

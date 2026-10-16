@@ -44,6 +44,7 @@ export class RoomHost {
   private seats: Seat[] = [];
   private peers = new Set<Peer>();
   private state: unknown = null;
+  private options: unknown = undefined;
   private seq = 0;
   private botTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -140,6 +141,13 @@ export class RoomHost {
         this.broadcastRoom();
         return;
       }
+      case 'setOptions': {
+        if (!isHost) throw new IllegalMoveError('Only the host can change the settings');
+        if (this.started) throw new IllegalMoveError('The game has already started');
+        this.options = msg.options;
+        this.broadcastRoom();
+        return;
+      }
       case 'start':
       case 'rematch': {
         if (!isHost) throw new IllegalMoveError('Only the host can start the game');
@@ -150,6 +158,7 @@ export class RoomHost {
         this.state = this.engine.setup(
           this.seats.map((s) => ({ name: s.name })),
           this.rng,
+          this.options,
         );
         this.afterChange();
         return;
@@ -185,6 +194,12 @@ export class RoomHost {
     this.scheduleBot();
   }
 
+  /** Tests run bots instantly (botDelayMs 0); otherwise the game may ask for a longer pause. */
+  private botDelay() {
+    if (this.botDelayMs === 0) return 0;
+    return this.engine.botDelayMs?.(this.state) ?? this.botDelayMs;
+  }
+
   private scheduleBot() {
     if (this.botTimer) clearTimeout(this.botTimer);
     this.botTimer = null;
@@ -215,7 +230,7 @@ export class RoomHost {
         t: 'error',
         message: `${this.seats[seat]?.name ?? 'Computer'} is stuck. Please restart the game.`,
       });
-    }, this.botDelayMs);
+    }, this.botDelay());
   }
 
   roomView(): RoomView {
@@ -234,6 +249,7 @@ export class RoomHost {
       minPlayers: this.engine.minPlayers,
       maxPlayers: this.engine.maxPlayers,
       started: this.started,
+      options: this.options,
     };
   }
 

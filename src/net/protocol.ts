@@ -19,6 +19,8 @@ export interface RoomView {
   minPlayers: number;
   maxPlayers: number;
   started: boolean;
+  /** Game settings chosen by the host in the lobby. */
+  options?: unknown;
 }
 
 export type ClientMessage =
@@ -33,6 +35,7 @@ export type ClientMessage =
   | { t: 'addBot' }
   | { t: 'removeSeat'; seat: number }
   | { t: 'start' }
+  | { t: 'setOptions'; options: unknown }
   // In game.
   | { t: 'move'; seat: number; move: unknown }
   | { t: 'replaceWithBot'; seat: number }

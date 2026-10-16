@@ -14,6 +14,7 @@ import {
 import QRCode from 'react-native-qrcode-svg';
 
 import { Banner, Button, Card, Input, Screen, TopBar } from '@/components/ui';
+import { GAME_UI } from '@/game-ui';
 import { gameMeta } from '@/games/registry';
 import { getProfile, useProfile } from '@/lib/profile';
 import { clearError, leaveSession, send, useSession } from '@/net/session';
@@ -59,6 +60,7 @@ export default function Room() {
   }
 
   const game = gameMeta(room.gameId)!;
+  const Options = GAME_UI[room.gameId]?.Options;
   const isHost = room.hostClientId === getProfile().clientId;
   const full = room.seats.length >= room.maxPlayers;
   const canStart = room.seats.length >= room.minPlayers;
@@ -173,6 +175,14 @@ export default function Room() {
                   />
                 ) : null}
               </>
+            ) : null}
+
+            {Options ? (
+              <Options
+                options={room.options}
+                isHost={isHost}
+                onChange={(options) => send({ t: 'setOptions', options })}
+              />
             ) : null}
 
             {isHost ? (

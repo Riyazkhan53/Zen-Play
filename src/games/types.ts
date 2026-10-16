@@ -16,7 +16,8 @@ export interface GameDef<S = unknown, M = unknown> {
   id: GameId;
   minPlayers: number;
   maxPlayers: number;
-  setup(seats: SeatInfo[], rng: Rng): S;
+  /** `options` are game settings chosen in the lobby (e.g. Rummy's match format). */
+  setup(seats: SeatInfo[], rng: Rng, options?: unknown): S;
   /** Seat whose turn it is, or null once the game is over. */
   currentSeat(state: S): number | null;
   /** Returns the next state, or throws IllegalMoveError. Never mutates `state`. */
@@ -25,6 +26,8 @@ export interface GameDef<S = unknown, M = unknown> {
   botMove(state: S, seat: number, rng: Rng): M;
   /** Seats in finishing order (winner first) once the game is over. */
   rankings(state: S): number[];
+  /** Overrides how long a computer player waits before acting (e.g. on a results screen). */
+  botDelayMs?(state: S): number | undefined;
   /**
    * What a device controlling `seats` may see. Games with hidden information
    * (card hands, the deck order) blank out everything else; the host only

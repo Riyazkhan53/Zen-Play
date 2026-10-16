@@ -43,7 +43,8 @@ function fitsRun(ranks: number[], size: number): boolean {
   });
 }
 
-function classify(cards: PlayingCard[], wildRank: number): MeldKind | null {
+/** What a group of cards forms, or null if it is not a valid group. */
+export function classify(cards: PlayingCard[], wildRank: number): MeldKind | null {
   const n = cards.length;
   if (n < 3) return null;
   const printed = cards.filter((c) => c.suit === 'J').length;

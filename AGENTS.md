@@ -51,6 +51,10 @@ Docs: https://docs.expo.dev/eas/index.md
 - Hidden information: implement `viewFor(state, seats)` on the engine (see UNO). `RoomHost` sends each
   peer only the view for the seats it owns, so other hands and the deck order never leave the host.
   Card UIs use `useHandToShow`/`PassCurtain` so players sharing a device can't see each other's cards.
+- Lobby settings: a game's UI module can export `Options` (see Rummy's match format). The host sends
+  `setOptions`; `RoomHost` passes them to `engine.setup(seats, rng, options)`. Validate them in the engine.
+- Multi-round games keep `currentSeat` non-null between rounds (null means the match is over) and can
+  return a longer `botDelayMs` so results stay on screen.
 - Each game also has a UI module in `src/game-ui/<game>.tsx` (board, controls, status text) registered
   in `src/game-ui/index.ts`; `src/app/play.tsx` is shared and shouldn't need game-specific code.
 - `src/net/lan.native.ts` is native-only (TCP); `src/net/lan.ts` is the web stub. Keep their exports in sync.

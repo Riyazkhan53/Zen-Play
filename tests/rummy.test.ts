@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { bestDiscard, rummy, RummyState } from '../src/games/rummy/engine';
+import { bestDiscard, hasPureSequence, rummy, RummyState } from '../src/games/rummy/engine';
 import { arrange, PlayingCard, Suit } from '../src/games/rummy/melds';
 import { IllegalMoveError, Rng } from '../src/games/types';
 import type { HostMessage } from '../src/net/protocol';
@@ -159,4 +159,106 @@ test('rummy: other players never receive your hand or the stock', () => {
     assert.equal(v.stock.length, 0);
   }
   host.dispose();
+});
+
+// ---------- Match formats ----------
+
+/** Plays bot moves until the deal ends (or the match does). */
+function playDeal(s: RummyState, rng: Rng): RummyState {
+  for (let i = 0; i < 3000 && s.phase !== 'roundOver' && !s.over; i++) {
+    s = rummy.applyMove(s, s.turn, rummy.botMove(s, s.turn, rng), rng);
+  }
+  return s;
+}
+
+test('rummy modes: points is one deal; options are validated', () => {
+  const s = rummy.setup(seats(2), seeded(9), { mode: 'points' });
+  assert.equal(s.totalRounds, 1);
+  assert.equal(playDeal(s, seeded(9)).over, true);
+  assert.throws(() => rummy.setup(seats(2), Math.random, { mode: 'pool', poolLimit: 10 }), IllegalMoveError);
+  assert.equal(rummy.setup(seats(2), Math.random, { mode: 'nonsense' }).options.mode, 'points');
+});
+
+test('rummy modes: deals (best of 3) adds up totals and the lowest total wins', () => {
+  const rng = seeded(11);
+  let s = rummy.setup(seats(3), rng, { mode: 'deals', deals: 3 });
+  for (let round = 1; round <= 3; round++) {
+    assert.equal(s.round, round);
+    s = playDeal(s, rng);
+    if (round < 3) {
+      assert.equal(s.phase, 'roundOver');
+      assert.equal(rummy.currentSeat(s), s.roundWinner, 'the deal winner starts the next deal');
+      assert.throws(() => rummy.applyMove(s, 0, { type: 'draw', from: 'stock' }, rng), IllegalMoveError);
+      s = rummy.applyMove(s, 1, { type: 'nextRound' }, rng);
+      // The last seat deals first, so the deal passes to seat 0, then seat 1.
+      assert.equal(s.dealer, (round - 1) % 3, 'dealer moves round the table');
+    }
+  }
+  assert.equal(s.over, true);
+  assert.equal(s.history.length, 3);
+  const sums = [0, 1, 2].map((i) => s.history.reduce((t, h) => t + h.scores[i], 0));
+  assert.deepEqual(s.totals, sums);
+  assert.equal(s.totals[s.winner!], Math.min(...s.totals));
+});
+
+test('rummy modes: pool knocks players out at the limit; last one in wins', () => {
+  const rng = seeded(12);
+  let s = rummy.setup(seats(3), rng, { mode: 'pool', poolLimit: 101 });
+  assert.equal(s.totalRounds, null);
+  for (let deal = 0; deal < 40 && !s.over; deal++) {
+    s = playDeal(s, rng);
+    for (let i = 0; i < 3; i++) assert.equal(s.eliminated[i], s.totals[i] >= 101);
+    if (!s.over) {
+      s = rummy.applyMove(s, s.turn, { type: 'nextRound' }, rng);
+      s.eliminated.forEach((out, i) => out && assert.equal(s.handCounts[i], 0, 'eliminated players are not dealt in'));
+    }
+  }
+  assert.equal(s.over, true);
+  assert.equal(s.eliminated.filter((e) => !e).length <= 1, true);
+  assert.equal(s.eliminated[s.winner!], false);
+  // Pool 201 uses 25/50 drops.
+  const big = rummy.setup(seats(2), rng, { mode: 'pool', poolLimit: 201 });
+  assert.equal(rummy.applyMove(big, big.turn, { type: 'drop' }, rng).history[0].scores[big.turn], 25);
+});
+
+test('rummy modes: seven deals, hidden joker, rounds 1 and 7 count double', () => {
+  const rng = seeded(13);
+  let s = rummy.setup(seats(2), rng, { mode: 'seven' });
+  assert.equal(s.totalRounds, 7);
+  assert.equal(s.multiplier, 2);
+  assert.equal(s.hiddenJoker, true);
+
+  // Before a pure sequence, a player's view hides the joker.
+  const noPure = s.hands.map((h) => !hasPureSequence(h!));
+  s.jokerSeen.forEach((seen, i) => assert.equal(seen, !noPure[i]));
+  const v = rummy.viewFor!({ ...s, jokerSeen: [false, true] }, [0]);
+  assert.equal(v.wildCard, null);
+  assert.equal(v.wildRank, -1);
+  const v2 = rummy.viewFor!({ ...s, jokerSeen: [true, false] }, [0]);
+  assert.equal(v2.wildRank, s.wildRank);
+
+  // A dropped first deal costs double.
+  const dropped = rummy.applyMove(s, s.turn, { type: 'drop' }, rng);
+  assert.equal(dropped.history[0].scores[s.turn], 40);
+  s = dropped;
+  for (let round = 2; round <= 7; round++) {
+    s = rummy.applyMove(s, s.turn, { type: 'nextRound' }, rng);
+    assert.equal(s.multiplier, round === 7 ? 2 : 1);
+    s = playDeal(s, rng);
+  }
+  assert.equal(s.over, true);
+  assert.equal(s.history.length, 7);
+});
+
+test('rummy: hasPureSequence spots natural runs only', () => {
+  assert.equal(hasPureSequence(hand('5H 6H 7H 2C')), true);
+  assert.equal(hasPureSequence(hand('QS KS AS')), true);
+  assert.equal(hasPureSequence(hand('5H 6H JK 8H')), false);
+  assert.equal(hasPureSequence(hand('5H 6D 7H')), false);
+});
+
+test('rummy: bots pause on the results screen, but not in tests', () => {
+  const s = rummy.setup(seats(2), seeded(14), { mode: 'deals', deals: 2 });
+  assert.equal(rummy.botDelayMs!(s), undefined);
+  assert.equal(rummy.botDelayMs!({ ...s, phase: 'roundOver' }), 6000);
 });
