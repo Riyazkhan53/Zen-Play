@@ -1,20 +1,23 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ReactNode, useEffect, useState } from 'react';
+import { ComponentProps, ReactNode, useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, Text, useWindowDimensions, View } from 'react-native';
 
 import { dropCost, modeLabel, RummyState } from '@/games/rummy/engine';
 import { arrange, classify, isJoker, PlayingCard } from '@/games/rummy/melds';
 import type { RoomView } from '@/net/protocol';
-import { makeStyles, PLAYER_COLORS, radius, useTheme } from '@/ui/theme';
+import { makeStyles, PLAYER_COLORS, radius } from '@/ui/theme';
 
 import { PassCurtain, useHandToShow } from '../pass-curtain';
 import { PlayingCardView, shortName } from '../playing-card';
 import { Button } from '../ui';
 import { DealAnimation, dealDuration, FlyingCard, LandingCard } from './fly';
 import { tableLayout } from './geometry';
-import { RummyHand } from './hand';
+import { handLayout, RummyHand } from './hand';
 
 const SUIT_ORDER = 'SHCDJ';
+const PADDING = 12;
+const RIM = 5;
 
 /** Initial grouping: the best arrangement, each group sorted, loose cards by suit. */
 export function autoGroups(cards: PlayingCard[], wildRank: number): number[][] {
@@ -64,8 +67,8 @@ export function RummyTable({
   const { seat: handSeat, covered, reveal } = useHandToShow(mySeats, turn);
   const bottomSeat = handSeat ?? mySeats[0] ?? 0;
   const portrait = window.height > window.width;
-  const layout = tableLayout(size, Math.round(portrait ? size * 0.92 : size * 0.56), state.seats.length, bottomSeat);
-  const cardW = Math.max(40, Math.min(64, size / 8.6));
+  const inner = size - 2 * PADDING;
+  const layout = tableLayout(inner, Math.round(portrait ? inner * 1.02 : inner * 0.52), state.seats.length, bottomSeat);
 
   const hand = handSeat != null ? (state.hands[handSeat] ?? []) : [];
   const myTurn = turn != null && handSeat === turn && !covered;
@@ -78,6 +81,7 @@ export function RummyTable({
   const [own, setOwn] = useState<{ key: string; groups: number[][] }>({ key: '', groups: [] });
   const selected = sel.key === handKey ? sel.ids.filter((id) => hand.some((c) => c.id === id)) : [];
   const groups = reconcile(own.key === handKey ? own.groups : autoGroups(hand, state.wildRank), hand);
+  const fit = handLayout(inner, groups.map((g) => g.length), portrait ? 76 : 88);
   const setGroups = (g: number[][]) => setOwn({ key: handKey, groups: g });
   const toggle = (id: number) =>
     setSel({ key: handKey, ids: selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id] });
@@ -104,7 +108,7 @@ export function RummyTable({
 
   // ---- Animations for the latest move ----
   const last = state.last;
-  const handTarget = { x: size / 2, y: layout.height + 40 };
+  const handTarget = { x: inner / 2, y: layout.height + 60 };
   const seatPoint = (s: number) => (s === handSeat ? handTarget : layout.seats[s]);
   let flight: ReactNode = null;
   if (last && (last.kind === 'draw-stock' || last.kind === 'draw-discard')) {
@@ -132,19 +136,48 @@ export function RummyTable({
   const showDeal = dealing && dealtRound !== state.round;
   const activeSeats = state.seats.map((_, i) => i).filter((i) => !state.eliminated[i]);
 
+  const tableRadius = Math.min(layout.width, layout.height) / 2;
+  const groupSelected = () => {
+    setGroups([...groups.map((g) => g.filter((id) => !selected.includes(id))).filter((g) => g.length), selected]);
+    setSel({ key: handKey, ids: [] });
+  };
+
   return (
-    <View style={{ width: size }}>
+    <View style={[styles.root, { width: size }]}>
+      {/* Own clipped layer, so the off-edge glows never widen (or scroll) the table. */}
+      <View style={styles.backdrop} pointerEvents="none">
+        <LinearGradient colors={['#101A3A', '#0A0F24', '#070A18']} style={styles.fill} />
+        {/* Soft colour behind the glass so it has something to catch. */}
+        <View style={[styles.blob, styles.blobTeal, { width: inner * 0.7, height: inner * 0.7, borderRadius: inner }]} />
+        <View style={[styles.blob, styles.blobViolet, { width: inner * 0.6, height: inner * 0.6, borderRadius: inner }]} />
+      </View>
+
       {/* Table */}
       <View style={{ width: layout.width, height: layout.height }}>
         <LinearGradient
-          colors={['#1E7A4D', '#0F5132']}
-          start={{ x: 0.3, y: 0 }}
-          end={{ x: 0.7, y: 1 }}
-          style={[styles.felt, { borderRadius: Math.min(layout.width, layout.height) / 2 }]}
+          colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.3)']}
+          start={{ x: 0.2, y: 0 }}
+          end={{ x: 0.8, y: 1 }}
+          style={[styles.rim, { borderRadius: tableRadius }]}
         />
-        <View style={[styles.rail, { borderRadius: Math.min(layout.width, layout.height) / 2 }]} />
+        <LinearGradient
+          colors={['rgba(64,190,255,0.22)', 'rgba(40,60,140,0.28)', 'rgba(120,70,220,0.24)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.glass, { borderRadius: tableRadius - RIM }]}
+        />
+        {/* Light caught across the top of the glass. */}
+        <LinearGradient
+          colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']}
+          style={[
+            styles.sheen,
+            { borderTopLeftRadius: tableRadius, borderTopRightRadius: tableRadius, height: layout.height * 0.45 },
+          ]}
+        />
+        <View style={[styles.innerLine, { borderRadius: tableRadius - RIM - 10 }]} />
 
-        <View style={[styles.info, { top: layout.height / 2 - layout.card * 1.55 }]}>
+        <View style={[styles.info, { top: layout.deck.y - layout.card * 1.45 }]}>
+          <Text style={styles.brand}>ZEN RUMMY</Text>
           <Text style={styles.infoText}>
             {modeLabel(state.options)}
             {state.totalRounds && state.totalRounds > 1 ? ` · Deal ${state.round}/${state.totalRounds}` : ''}
@@ -187,7 +220,7 @@ export function RummyTable({
         <Pressable
           disabled={!drawPhase || !top}
           onPress={() => send({ type: 'draw', from: 'discard' })}
-          accessibilityLabel={top ? `Pick up ${shortName(top)}` : 'Open pile, empty'}
+          accessibilityLabel={top ? `Take ${shortName(top)}` : 'Open pile, empty'}
           style={[styles.abs, { left: layout.open.x - layout.card / 2, top: layout.open.y - layout.card * 0.7 }]}
         >
           {under ? (
@@ -208,11 +241,11 @@ export function RummyTable({
           )}
           {drawPhase && top ? <Glow width={layout.card} /> : null}
         </Pressable>
-        <Text style={[styles.pileCaption, { left: layout.deck.x - 40, top: layout.deck.y + layout.card * 0.78 }]}>
-          Deck
+        <Text style={[styles.pileCaption, { left: layout.deck.x - 35, top: layout.deck.y + layout.card * 0.82 }]}>
+          DECK {state.stockCount}
         </Text>
-        <Text style={[styles.pileCaption, { left: layout.open.x - 40, top: layout.open.y + layout.card * 0.78 }]}>
-          Open card
+        <Text style={[styles.pileCaption, { left: layout.open.x - 35, top: layout.open.y + layout.card * 0.82 }]}>
+          OPEN
         </Text>
 
         {/* Seats round the table */}
@@ -257,78 +290,81 @@ export function RummyTable({
       ) : state.phase === 'roundOver' ? null : (
         <DelayedReveal key={`hand${state.round}`} delay={showDeal ? dealDuration(activeSeats.length) : 0}>
           <View style={styles.handHeader}>
-            <Text style={styles.handTitle}>
-              {mySeats.length > 1 ? `${room.seats[handSeat].name}'s hand` : 'Your hand'} ·{' '}
-              <Text style={points === 0 ? styles.ready : undefined}>
-                {points === 0 ? 'Ready to declare!' : `${points} pts`}
-              </Text>
-              {state.hiddenJoker && !state.jokerSeen[handSeat] ? ' · joker hidden until you have a pure sequence' : ''}
+            <Text style={styles.handTitle} numberOfLines={1}>
+              {mySeats.length > 1 ? `${room.seats[handSeat].name}'s hand` : 'Your hand'}
             </Text>
-            <Button
-              title="Sort"
-              variant="ghost"
-              onPress={() => setGroups(autoGroups(hand, state.wildRank))}
-              style={styles.small}
-            />
-            {drawPhase ? (
-              <Button
-                title={`Drop (${dropCost(state.options, state.hasDrawn[handSeat]) * state.multiplier})`}
-                variant="danger"
-                onPress={() => send({ type: 'drop' })}
-                style={styles.small}
-              />
-            ) : null}
+            <View style={[styles.pointsPill, points === 0 && styles.pointsReady]}>
+              <Text style={[styles.pointsText, points === 0 && styles.pointsTextReady]}>
+                {points === 0 ? 'Ready to declare' : `${points} pts`}
+              </Text>
+            </View>
           </View>
+          {state.hiddenJoker && !state.jokerSeen[handSeat] ? (
+            <Text style={styles.tip}>Joker stays hidden until you have a pure sequence.</Text>
+          ) : null}
           <RummyHand
             cards={hand}
             groups={groups}
             onGroupsChange={setGroups}
             wildRank={state.wildRank}
-            cardWidth={cardW}
+            cardWidth={fit.cardWidth}
+            step={fit.step}
             selected={selected}
             onToggle={toggle}
             onDropOnTable={discardPhase ? discard : undefined}
           />
-          <View style={styles.actions}>
+
+          <View style={styles.actionBar}>
+            <ActionButton icon="swap-horizontal" label="Sort" onPress={() => setGroups(autoGroups(hand, state.wildRank))} />
             {selected.length > 1 ? (
-              <Button
-                title={`Group ${selected.length} cards`}
-                variant="secondary"
-                onPress={() => {
-                  setGroups([
-                    ...groups.map((g) => g.filter((id) => !selected.includes(id))).filter((g) => g.length),
-                    selected,
-                  ]);
-                  setSel({ key: handKey, ids: [] });
-                }}
-                style={styles.flex}
-              />
+              <ActionButton icon="albums-outline" label={`Group ${selected.length}`} onPress={groupSelected} />
+            ) : null}
+            {drawPhase ? (
+              <>
+                <ActionButton icon="layers-outline" label="Draw" tone="primary" onPress={() => send({ type: 'draw', from: 'stock' })} />
+                <ActionButton
+                  icon="hand-left-outline"
+                  label="Take"
+                  tone="primary"
+                  disabled={!top}
+                  onPress={() => send({ type: 'draw', from: 'discard' })}
+                />
+                <ActionButton
+                  icon="exit-outline"
+                  label={`Drop ${dropCost(state.options, state.hasDrawn[handSeat]) * state.multiplier}`}
+                  tone="danger"
+                  onPress={() => send({ type: 'drop' })}
+                />
+              </>
             ) : null}
             {discardPhase ? (
               <>
-                <Button
-                  title={single ? `Discard ${shortName(single)}` : 'Pick a card to discard'}
-                  variant="secondary"
+                <ActionButton
+                  icon="arrow-up-circle-outline"
+                  label="Discard"
+                  tone="primary"
                   disabled={!single || blockedThrow}
                   onPress={() => single && discard(single.id)}
-                  style={styles.flex}
                 />
-                <Button
-                  title="Declare 🏆"
+                <ActionButton
+                  icon="trophy-outline"
+                  label="Declare"
+                  tone="gold"
                   disabled={!canDeclare}
                   onPress={() => single && send({ type: 'declare', cardId: single.id })}
-                  style={styles.flex}
                 />
               </>
             ) : null}
           </View>
           <Text style={styles.tip}>
             {blockedThrow
-              ? "You can't throw back the card you just picked up."
+              ? "You can't throw back the card you just took."
               : drawPhase
-                ? 'Your turn: tap the deck or the open card.'
+                ? 'Your turn — draw from the deck or take the open card.'
                 : discardPhase
-                  ? 'Tap a card to select it, or drag it onto the table to discard. Drag cards between groups to arrange.'
+                  ? single
+                    ? `Discard ${shortName(single)}, or declare if the rest is grouped.`
+                    : 'Tap a card to discard it, or drag it up onto the table. Drag between groups to arrange.'
                   : 'Drag cards between groups to arrange your hand.'}
           </Text>
         </DelayedReveal>
@@ -336,6 +372,49 @@ export function RummyTable({
 
       {state.phase === 'roundOver' ? <RoundResults state={state} room={room} mySeats={mySeats} act={act} /> : null}
     </View>
+  );
+}
+
+type Tone = 'plain' | 'primary' | 'danger' | 'gold';
+const TONES: Record<Tone, { bg: string[]; border: string; text: string }> = {
+  plain: { bg: ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.06)'], border: 'rgba(255,255,255,0.22)', text: '#E2E8F0' },
+  primary: { bg: ['#3B82F6', '#1D4ED8'], border: 'rgba(147,197,253,0.6)', text: '#FFFFFF' },
+  danger: { bg: ['rgba(239,68,68,0.25)', 'rgba(185,28,28,0.25)'], border: 'rgba(252,165,165,0.6)', text: '#FECACA' },
+  gold: { bg: ['#FCD34D', '#F59E0B'], border: 'rgba(254,243,199,0.8)', text: '#422006' },
+};
+
+/** Pill button in the glass action bar. */
+function ActionButton({
+  icon,
+  label,
+  onPress,
+  tone = 'plain',
+  disabled,
+}: {
+  icon: ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  onPress: () => void;
+  tone?: Tone;
+  disabled?: boolean;
+}) {
+  const styles = useStyles();
+  const t = TONES[tone];
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      style={({ pressed }) => [styles.action, disabled && styles.actionDisabled, pressed && styles.actionPressed]}
+    >
+      <LinearGradient colors={t.bg as [string, string]} style={[styles.actionFill, { borderColor: t.border }]}>
+        <Ionicons name={icon} size={18} color={t.text} />
+        <Text style={[styles.actionText, { color: t.text }]} numberOfLines={1}>
+          {label}
+        </Text>
+      </LinearGradient>
+    </Pressable>
   );
 }
 
@@ -361,7 +440,6 @@ function Seat({
   status: 'out' | 'dropped' | 'bot' | null;
 }) {
   const styles = useStyles();
-  const colors = useTheme();
   const [pulse] = useState(() => new Animated.Value(0));
   useEffect(() => {
     if (!active) return;
@@ -384,11 +462,11 @@ function Seat({
     >
       <View>
         {active ? (
-          <Animated.View style={[styles.turnRing, { borderColor: colors.accent, transform: [{ scale: ring }] }]} />
+          <Animated.View style={[styles.turnRing, { transform: [{ scale: ring }] }]} />
         ) : null}
-        <View style={[styles.avatar, { backgroundColor: color }]}>
+        <LinearGradient colors={[color, '#0F172A']} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1.4 }} style={styles.avatar}>
           <Text style={styles.avatarText}>{status === 'bot' ? '🤖' : name.slice(0, 1).toUpperCase()}</Text>
-        </View>
+        </LinearGradient>
         {dealer ? <Text style={styles.dealer}>D</Text> : null}
         {!me && cards > 0 ? (
           <View style={styles.cardCount}>
@@ -496,21 +574,47 @@ function RoundResults({
   );
 }
 
-const useStyles = makeStyles((colors) => ({
+const useStyles = makeStyles(() => ({
   abs: { position: 'absolute', left: 0, top: 0 },
   flex: { flex: 1 },
-  felt: { position: 'absolute', left: 10, top: 10, right: 10, bottom: 10 },
-  rail: {
+  root: { padding: PADDING, borderRadius: 24, overflow: 'hidden' },
+  backdrop: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, overflow: 'hidden' },
+  fill: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 },
+  blob: { position: 'absolute', opacity: 0.6, filter: 'blur(50px)' },
+  blobTeal: { left: -40, top: -20, backgroundColor: 'rgba(20,184,166,0.35)' },
+  blobViolet: { right: -50, top: '30%', backgroundColor: 'rgba(139,92,246,0.35)' },
+  rim: {
     position: 'absolute',
     left: 0,
     top: 0,
     right: 0,
     bottom: 0,
-    borderWidth: 10,
-    borderColor: '#5B3A1E',
+    shadowColor: '#38BDF8',
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 0 },
   },
-  info: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  infoText: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
+  glass: {
+    position: 'absolute',
+    left: RIM,
+    top: RIM,
+    right: RIM,
+    bottom: RIM,
+    backgroundColor: 'rgba(10,16,40,0.55)',
+  },
+  sheen: { position: 'absolute', left: RIM, right: RIM, top: RIM },
+  innerLine: {
+    position: 'absolute',
+    left: RIM + 10,
+    top: RIM + 10,
+    right: RIM + 10,
+    bottom: RIM + 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  info: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 2 },
+  brand: { color: 'rgba(255,255,255,0.22)', fontSize: 11, fontWeight: '900', letterSpacing: 4 },
+  infoText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
   // Rotated so its rank corner sticks out on the left of the deck.
   jokerTuck: { position: 'absolute', top: 6, transform: [{ rotate: '-90deg' }] },
   hiddenMark: {
@@ -526,24 +630,46 @@ const useStyles = makeStyles((colors) => ({
   emptyPile: { borderRadius: 6, borderWidth: 2, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.3)' },
   pileCaption: {
     position: 'absolute',
-    width: 80,
+    width: 70,
     textAlign: 'center',
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 11,
-    fontWeight: '700',
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
-  glow: { position: 'absolute', left: -4, top: -4, borderWidth: 3, borderColor: '#FDE68A' },
+  glow: {
+    position: 'absolute',
+    left: -4,
+    top: -4,
+    borderWidth: 3,
+    borderColor: '#FDE68A',
+    shadowColor: '#FDE68A',
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+  },
   seat: { position: 'absolute', width: 92, alignItems: 'center' },
   faded: { opacity: 0.45 },
-  turnRing: { position: 'absolute', left: -5, top: -5, width: 50, height: 50, borderRadius: 25, borderWidth: 3 },
+  turnRing: {
+    position: 'absolute',
+    left: -5,
+    top: -5,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 3,
+    borderColor: '#FACC15',
+    shadowColor: '#FACC15',
+    shadowOpacity: 0.9,
+    shadowRadius: 8,
+  },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.75)',
   },
   avatarText: { color: '#fff', fontWeight: '900', fontSize: 17 },
   dealer: {
@@ -565,21 +691,23 @@ const useStyles = makeStyles((colors) => ({
     position: 'absolute',
     right: -12,
     top: -4,
-    backgroundColor: '#1E3A8A',
-    borderColor: '#fff',
-    borderWidth: 1.5,
-    borderRadius: 5,
-    paddingHorizontal: 4,
+    backgroundColor: '#312E81',
+    borderColor: 'rgba(255,255,255,0.8)',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 5,
     paddingVertical: 1,
   },
   cardCountText: { color: '#fff', fontSize: 10, fontWeight: '900' },
   seatName: {
-    marginTop: 4,
+    marginTop: 5,
     color: '#fff',
     fontSize: 12,
     fontWeight: '800',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: 9,
     paddingVertical: 2,
     borderRadius: 10,
     overflow: 'hidden',
@@ -587,28 +715,63 @@ const useStyles = makeStyles((colors) => ({
   },
   seatTotal: { color: '#FDE68A', fontSize: 11, fontWeight: '800', marginTop: 2 },
   seatStatus: { color: '#FCA5A5', fontSize: 11, fontWeight: '900', marginTop: 2 },
-  waiting: { color: colors.muted, textAlign: 'center', paddingVertical: 20 },
+  waiting: { color: 'rgba(255,255,255,0.65)', textAlign: 'center', paddingVertical: 20 },
   curtain: { marginTop: 14 },
-  handHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
-  handTitle: { flex: 1, color: colors.muted, fontSize: 13, fontWeight: '700' },
+  handHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
+  handTitle: { flex: 1, color: '#E2E8F0', fontSize: 15, fontWeight: '800' },
+  pointsPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  pointsReady: { backgroundColor: 'rgba(52,211,153,0.2)', borderColor: '#34D399' },
+  pointsText: { color: '#E2E8F0', fontSize: 12, fontWeight: '900' },
+  pointsTextReady: { color: '#6EE7B7' },
   ready: { color: '#34D399', fontWeight: '900' },
-  small: { minHeight: 34, paddingHorizontal: 12 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  tip: { color: colors.faint, fontSize: 12, textAlign: 'center', marginTop: 8 },
+  actionBar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+    padding: 8,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  action: { flexGrow: 1, minWidth: 84 },
+  actionFill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 42,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  actionText: { fontSize: 14, fontWeight: '800' },
+  actionDisabled: { opacity: 0.4 },
+  actionPressed: { transform: [{ scale: 0.97 }] },
+  tip: { color: 'rgba(226,232,240,0.6)', fontSize: 12, textAlign: 'center', marginTop: 8 },
   results: {
     marginTop: 14,
     padding: 16,
     borderRadius: radius.lg,
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(255,255,255,0.18)',
     gap: 6,
   },
-  resultsTitle: { color: colors.text, fontSize: 18, fontWeight: '900', textAlign: 'center' },
-  resultsSub: { color: colors.muted, fontSize: 13, textAlign: 'center' },
+  resultsTitle: { color: '#F8FAFC', fontSize: 18, fontWeight: '900', textAlign: 'center' },
+  resultsSub: { color: 'rgba(226,232,240,0.7)', fontSize: 13, textAlign: 'center' },
   resultsHead: { flexDirection: 'row', paddingHorizontal: 4, marginTop: 8, paddingLeft: 24 },
   resultsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, paddingHorizontal: 4 },
-  resultsCell: { width: 70, color: colors.text, fontSize: 14, fontWeight: '700', textAlign: 'right' },
+  resultsCell: { width: 70, color: '#F1F5F9', fontSize: 14, fontWeight: '700', textAlign: 'right' },
   resultsName: { flex: 1, textAlign: 'left' },
   dot: { width: 12, height: 12, borderRadius: 6 },
   nextBtn: { marginTop: 10 },

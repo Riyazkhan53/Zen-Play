@@ -1,9 +1,10 @@
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-import { ChessBoard, pieceGlyph } from '@/components/chess-board';
+import { ChessBoard, ChessPiece, ChessPlayerBar } from '@/components/chess-board';
 import { Button } from '@/components/ui';
 import { ChessState, seatColor } from '@/games/chess/engine';
-import { makeStyles } from '@/ui/theme';
+import { PieceStyle, updateProfile, useProfile } from '@/lib/profile';
+import { makeStyles, radius } from '@/ui/theme';
 
 import type { GameUI } from './types';
 
@@ -18,33 +19,40 @@ const END_TEXT: Record<string, string> = {
 
 export const chessUI: GameUI<ChessState> = {
   shape: 'square',
-  Board: ({ state, size, mySeats, act }) => (
-    <ChessBoard
-      state={state}
-      size={size}
-      canMove={!state.over && mySeats.includes(state.turn)}
-      // Black's player sees the board from their side; sharing a device keeps White at the bottom.
-      flipped={mySeats.length === 1 && mySeats[0] === 1}
-      onMove={(m) => act(state.turn, { type: 'move', ...m })}
-    />
-  ),
+  Board: ({ state, room, size, mySeats, act }) => {
+    // Black's player sees the board from their side; sharing a device keeps White at the bottom.
+    const flipped = mySeats.length === 1 && mySeats[0] === 1;
+    const bar = (seat: number) => (
+      <ChessPlayerBar
+        name={room.seats[seat]?.name ?? (seat === 0 ? 'White' : 'Black')}
+        bot={room.seats[seat]?.bot}
+        color={seatColor(seat)}
+        state={state}
+        active={!state.over && state.turn === seat}
+        width={size}
+      />
+    );
+    return (
+      <View>
+        {bar(flipped ? 0 : 1)}
+        <ChessBoard
+          state={state}
+          size={size}
+          canMove={!state.over && mySeats.includes(state.turn)}
+          flipped={flipped}
+          onMove={(m) => act(state.turn, { type: 'move', ...m })}
+        />
+        {bar(flipped ? 1 : 0)}
+        <PieceStylePicker />
+      </View>
+    );
+  },
   Controls: ({ state, mySeats, act }) => {
     const styles = useStyles();
     // When both colours are on this device, "Resign" is for whoever is to move.
     const resigner = mySeats.length === 1 ? mySeats[0] : mySeats.includes(state.turn) ? state.turn : null;
-    const taken = (color: 'w' | 'b') =>
-      state.captured
-        .filter((p) => p[0] === color)
-        .map(pieceGlyph)
-        .join('');
     return (
       <View style={styles.controls}>
-        <Text style={styles.captured} numberOfLines={1}>
-          {taken('b') || ' '}
-        </Text>
-        <Text style={styles.captured} numberOfLines={1}>
-          {taken('w') || ' '}
-        </Text>
         {resigner != null && !state.over ? (
           <Button
             title="Resign"
@@ -73,8 +81,59 @@ export const chessUI: GameUI<ChessState> = {
   },
 };
 
+const STYLES: { style: PieceStyle; label: string }[] = [
+  { style: 'normal', label: 'Normal' },
+  { style: 'glass', label: 'Glass' },
+  { style: '3d', label: '3D' },
+];
+
+/** Normal / Glass / 3D pieces; saved in the profile. */
+export function PieceStylePicker() {
+  const styles = useStyles();
+  const { pieceStyle } = useProfile();
+  return (
+    <View style={styles.picker} accessibilityRole="radiogroup" accessibilityLabel="Piece style">
+      {STYLES.map(({ style, label }) => {
+        const on = pieceStyle === style;
+        return (
+          <Pressable
+            key={style}
+            onPress={() => updateProfile({ pieceStyle: style })}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: on }}
+            style={[styles.option, on && styles.optionOn]}
+          >
+            <View style={styles.preview}>
+              <ChessPiece piece="wN" size={34} pieceStyle={style} />
+              <View style={styles.previewBack}>
+                <ChessPiece piece="bQ" size={34} pieceStyle={style} />
+              </View>
+            </View>
+            <Text style={[styles.optionText, on && styles.optionTextOn]}>{label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 const useStyles = makeStyles((colors) => ({
-  controls: { flex: 1, gap: 4 },
-  captured: { color: colors.muted, fontSize: 18, letterSpacing: 1 },
-  resign: { minHeight: 36, marginTop: 4, alignSelf: 'flex-start' },
+  controls: { gap: 10 },
+  resign: { minHeight: 36, alignSelf: 'flex-start' },
+  picker: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  option: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    borderRadius: radius.sm,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  optionOn: { borderColor: colors.accent },
+  preview: { flexDirection: 'row', backgroundColor: '#739552', borderRadius: 6, paddingHorizontal: 2 },
+  previewBack: { marginLeft: -8 },
+  optionText: { color: colors.muted, fontSize: 12, fontWeight: '800' },
+  optionTextOn: { color: colors.text },
 }));

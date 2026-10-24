@@ -1,35 +1,53 @@
-import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Animated, Easing, Modal, Pressable, Text, View } from 'react-native';
 
-import { ChessState, legalMoves, Move, Piece, Promotion, seatColor } from '@/games/chess/engine';
+import { ChessState, Color, legalMoves, Move, Piece, PieceType, Promotion, seatColor } from '@/games/chess/engine';
+import { PieceStyle, useProfile } from '@/lib/profile';
 import { makeStyles, radius } from '@/ui/theme';
 
-// Filled glyphs for both sides (coloured by style); U+FE0E keeps iOS from
-// drawing them as emoji.
+import { ChessPieceSvg } from './chess-pieces';
+
+// Filled glyphs for text (status lines); U+FE0E keeps iOS from drawing emoji.
 const GLYPH: Record<string, string> = { K: '♚', Q: '♛', R: '♜', B: '♝', N: '♞', P: '♟' };
 export const pieceGlyph = (p: Piece) => `${GLYPH[p[1]]}︎`;
 
-const LIGHT = '#F0D9B5';
-const DARK = '#B58863';
+// The familiar green board.
+const LIGHT = '#EBECD0';
+const DARK = '#739552';
+const LIGHT_HL = '#F5F682';
+const DARK_HL = '#B9CA43';
 
-export function ChessPiece({ piece, size }: { piece: Piece; size: number }) {
-  const styles = useStyles();
-  const white = piece[0] === 'w';
+const VALUE: Record<PieceType, number> = { P: 1, N: 3, B: 3, R: 5, Q: 9, K: 0 };
+
+export function ChessPiece({ piece, size, pieceStyle }: { piece: Piece; size: number; pieceStyle?: PieceStyle }) {
+  const profile = useProfile();
   return (
-    <Text
-      style={[
-        styles.piece,
-        {
-          fontSize: size,
-          lineHeight: size * 1.15,
-          color: white ? '#FFFFFF' : '#1F1F1F',
-          textShadowColor: white ? '#1F1F1F' : 'rgba(255,255,255,0.6)',
-        },
-      ]}
-      allowFontScaling={false}
+    <ChessPieceSvg
+      type={piece[1] as PieceType}
+      white={piece[0] === 'w'}
+      size={size}
+      pieceStyle={pieceStyle ?? profile.pieceStyle}
+    />
+  );
+}
+
+/** Slides the piece that just moved from its old square. */
+function Sliding({ dx, dy, children }: { dx: number; dy: number; children: React.ReactNode }) {
+  const [t] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    Animated.timing(t, { toValue: 1, duration: 180, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+  }, [t]);
+  return (
+    <Animated.View
+      style={{
+        transform: [
+          { translateX: t.interpolate({ inputRange: [0, 1], outputRange: [dx, 0] }) },
+          { translateY: t.interpolate({ inputRange: [0, 1], outputRange: [dy, 0] }) },
+        ],
+      }}
     >
-      {pieceGlyph(piece)}
-    </Text>
+      {children}
+    </Animated.View>
   );
 }
 
@@ -59,7 +77,8 @@ export function ChessBoard({
   // Drop a stale selection once it's no longer this player's piece to move.
   const active = selected != null && state.board[selected]?.[0] === myColor && canMove ? selected : null;
   const targets = active != null ? moves.filter((m) => m.from === active) : [];
-  const kingInCheck = state.check ? state.board.indexOf(`${myColor}K`) : -1;
+  const kingInCheck = state.check ? state.board.indexOf(`${seatColor(state.turn)}K`) : -1;
+  const coordSize = Math.max(9, cell * 0.2);
 
   const tap = (sq: number) => {
     if (!canMove) return;
@@ -73,24 +92,35 @@ export function ChessBoard({
       setSelected(null);
       return;
     }
-    setSelected(state.board[sq]?.[0] === myColor ? sq : null);
+    setSelected(state.board[sq]?.[0] === myColor && sq !== active ? sq : null);
   };
+
+  // Where a square is drawn: row 0 is the top edge.
+  const place = (sq: number) => {
+    const r = Math.floor(sq / 8);
+    const f = sq % 8;
+    return { row: flipped ? r : 7 - r, col: flipped ? 7 - f : f };
+  };
+  const last = state.last;
+  const slide = last
+    ? {
+        dx: (place(last.from).col - place(last.to).col) * cell,
+        dy: (place(last.from).row - place(last.to).row) * cell,
+      }
+    : null;
 
   const squares = [];
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 8; col++) {
-      // Row 0 is drawn at the top: rank 8 for White's view, rank 1 when flipped.
       const rank = flipped ? row : 7 - row;
       const file = flipped ? 7 - col : col;
       const sq = rank * 8 + file;
       const piece = state.board[sq];
+      const light = (rank + file) % 2 === 1;
       const isTarget = targets.some((m) => m.to === sq);
-      const highlight =
-        sq === active
-          ? 'rgba(45,212,191,0.55)'
-          : state.last && (sq === state.last.from || sq === state.last.to)
-            ? 'rgba(250,204,21,0.45)'
-            : null;
+      const lit = sq === active || (last && (sq === last.from || sq === last.to));
+      const moved = last && sq === last.to && piece;
+      const pieceView = piece ? <ChessPiece piece={piece} size={cell} /> : null;
       squares.push(
         <Pressable
           key={sq}
@@ -98,29 +128,47 @@ export function ChessBoard({
           accessibilityLabel={`${'abcdefgh'[file]}${rank + 1}${piece ? ` ${piece[0] === 'w' ? 'white' : 'black'} ${piece[1]}` : ''}`}
           style={[
             styles.square,
-            { width: cell, height: cell, backgroundColor: (rank + file) % 2 === 0 ? DARK : LIGHT },
+            {
+              width: cell,
+              height: cell,
+              backgroundColor: lit ? (light ? LIGHT_HL : DARK_HL) : light ? LIGHT : DARK,
+            },
+            moved ? styles.raised : null,
           ]}
         >
-          {highlight ? <View style={[StyleSheet.absoluteFill, { backgroundColor: highlight }]} /> : null}
-          {sq === kingInCheck ? <View style={[StyleSheet.absoluteFill, styles.check]} /> : null}
+          {sq === kingInCheck ? (
+            <View style={[styles.check, { width: cell, height: cell, borderRadius: cell / 2 }]} />
+          ) : null}
           {col === 0 ? (
-            <Text style={[styles.coord, styles.rankLabel, { color: (rank + file) % 2 === 0 ? LIGHT : DARK }]}>
+            <Text
+              style={[styles.coord, styles.rankLabel, { color: light ? DARK : LIGHT, fontSize: coordSize }]}
+              allowFontScaling={false}
+            >
               {rank + 1}
             </Text>
           ) : null}
           {row === 7 ? (
-            <Text style={[styles.coord, styles.fileLabel, { color: (rank + file) % 2 === 0 ? LIGHT : DARK }]}>
+            <Text
+              style={[styles.coord, styles.fileLabel, { color: light ? DARK : LIGHT, fontSize: coordSize }]}
+              allowFontScaling={false}
+            >
               {'abcdefgh'[file]}
             </Text>
           ) : null}
-          {piece ? <ChessPiece piece={piece} size={cell * 0.78} /> : null}
+          {moved && slide ? (
+            <Sliding key={`${last.from}-${last.to}-${state.fullmove}-${state.turn}`} dx={slide.dx} dy={slide.dy}>
+              {pieceView}
+            </Sliding>
+          ) : (
+            pieceView
+          )}
           {isTarget ? (
             <View
               pointerEvents="none"
               style={
                 piece
-                  ? [styles.captureRing, { borderRadius: cell / 2, borderWidth: cell * 0.07 }]
-                  : [styles.dot, { width: cell * 0.3, height: cell * 0.3, borderRadius: cell * 0.15 }]
+                  ? [styles.captureRing, { borderRadius: cell / 2, borderWidth: cell * 0.09 }]
+                  : [styles.dot, { width: cell * 0.32, height: cell * 0.32, borderRadius: cell * 0.16 }]
               }
             />
           ) : null}
@@ -149,7 +197,7 @@ export function ChessBoard({
                     if (move) onMove(move);
                   }}
                 >
-                  <ChessPiece piece={`${myColor}${p}`} size={44} />
+                  <ChessPiece piece={`${myColor}${p}`} size={56} />
                 </Pressable>
               ))}
             </View>
@@ -160,14 +208,83 @@ export function ChessBoard({
   );
 }
 
+/** Pieces this colour has taken, cheapest first, and its material lead. */
+export function captures(state: ChessState, by: Color) {
+  const taken = state.captured.filter((p) => p[0] !== by).sort((a, b) => VALUE[a[1] as PieceType] - VALUE[b[1] as PieceType]);
+  const worth = (c: Color) =>
+    state.captured.filter((p) => p[0] !== c).reduce((n, p) => n + VALUE[p[1] as PieceType], 0);
+  return { taken, lead: worth(by) - worth(by === 'w' ? 'b' : 'w') };
+}
+
+/** Name strip above or below the board: avatar, name, captured pieces, clock-style turn marker. */
+export function ChessPlayerBar({
+  name,
+  color,
+  state,
+  active,
+  width,
+  bot,
+}: {
+  name: string;
+  color: Color;
+  state: ChessState;
+  active: boolean;
+  width: number;
+  bot?: boolean;
+}) {
+  const styles = useStyles();
+  const { taken, lead } = captures(state, color);
+  return (
+    <View style={[styles.bar, { width }]}>
+      <View style={[styles.avatar, color === 'w' ? styles.avatarWhite : styles.avatarBlack]}>
+        <Text style={[styles.avatarText, { color: color === 'w' ? '#312E2B' : '#FFFFFF' }]}>
+          {bot ? '🤖' : (name.trim() || '?').slice(0, 1).toUpperCase()}
+        </Text>
+      </View>
+      <View style={styles.barMain}>
+        <Text style={styles.barName} numberOfLines={1}>
+          {name}
+        </Text>
+        <View style={styles.taken}>
+          {taken.map((p, i) => (
+            <View key={i} style={i > 0 && taken[i - 1][1] === p[1] ? styles.takenTight : styles.takenGap}>
+              <ChessPiece piece={p} size={18} />
+            </View>
+          ))}
+          {lead > 0 ? <Text style={styles.lead}>+{lead}</Text> : null}
+        </View>
+      </View>
+      <View style={[styles.turnTag, active ? styles.turnTagOn : null]}>
+        <View style={[styles.turnDot, { backgroundColor: color === 'w' ? '#FFFFFF' : '#1B1A18' }]} />
+        <Text style={[styles.turnText, active ? styles.turnTextOn : null]}>{active ? 'To move' : color === 'w' ? 'White' : 'Black'}</Text>
+      </View>
+    </View>
+  );
+}
+
 const useStyles = makeStyles((colors) => ({
-  board: { flexDirection: 'row', flexWrap: 'wrap', borderRadius: 6, overflow: 'hidden' },
+  board: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    borderRadius: 4,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+  },
   square: { alignItems: 'center', justifyContent: 'center' },
-  piece: { textAlign: 'center', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 2 },
-  dot: { position: 'absolute', backgroundColor: 'rgba(15,23,42,0.35)' },
-  captureRing: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderColor: 'rgba(15,23,42,0.35)' },
-  check: { backgroundColor: 'rgba(239,68,68,0.6)', borderRadius: 999 },
-  coord: { position: 'absolute', fontSize: 10, fontWeight: '700' },
+  raised: { zIndex: 5 },
+  dot: { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.14)' },
+  captureRing: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderColor: 'rgba(0,0,0,0.14)' },
+  check: {
+    position: 'absolute',
+    backgroundColor: 'rgba(235,30,30,0.75)',
+    shadowColor: '#FF0000',
+    shadowOpacity: 0.9,
+    shadowRadius: 10,
+  },
+  coord: { position: 'absolute', fontWeight: '800' },
   rankLabel: { top: 2, left: 3 },
   fileLabel: { bottom: 1, right: 3 },
   overlay: { flex: 1, backgroundColor: 'rgba(2,6,23,0.7)', alignItems: 'center', justifyContent: 'center' },
@@ -181,11 +298,35 @@ const useStyles = makeStyles((colors) => ({
   pickerTitle: { color: colors.text, fontSize: 18, fontWeight: '800', textAlign: 'center', marginBottom: 12 },
   pickerRow: { flexDirection: 'row', gap: 10 },
   pickerBtn: {
-    width: 64,
-    height: 64,
+    width: 68,
+    height: 68,
     borderRadius: radius.md,
     backgroundColor: LIGHT,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 },
+  avatar: { width: 38, height: 38, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  avatarWhite: { backgroundColor: '#F0F0EC' },
+  avatarBlack: { backgroundColor: '#312E2B' },
+  avatarText: { fontSize: 17, fontWeight: '900' },
+  barMain: { flex: 1, minWidth: 0 },
+  barName: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  taken: { flexDirection: 'row', alignItems: 'center', height: 20, marginTop: 1 },
+  takenTight: { marginLeft: -11 },
+  takenGap: { marginLeft: -3 },
+  lead: { color: colors.muted, fontSize: 12, fontWeight: '800', marginLeft: 4 },
+  turnTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: colors.surfaceAlt,
+  },
+  turnTagOn: { backgroundColor: colors.scheme === 'dark' ? '#F0F0EC' : '#312E2B' },
+  turnDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1, borderColor: 'rgba(128,128,128,0.6)' },
+  turnText: { color: colors.muted, fontSize: 13, fontWeight: '800' },
+  turnTextOn: { color: colors.scheme === 'dark' ? '#312E2B' : '#FFFFFF' },
 }));

@@ -6,6 +6,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentName = 'teal' | 'violet' | 'blue' | 'pink' | 'orange';
+export type PieceStyle = 'normal' | 'glass' | '3d';
 
 const KEY = '@zenplay_profile';
 
@@ -14,11 +15,13 @@ export interface Profile {
   name: string;
   theme: ThemeMode;
   accent: AccentName;
+  /** How chess pieces are drawn. */
+  pieceStyle: PieceStyle;
 }
 
 const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
-let profile: Profile = { clientId: newId(), name: '', theme: 'system', accent: 'teal' };
+let profile: Profile = { clientId: newId(), name: '', theme: 'system', accent: 'teal', pieceStyle: 'normal' };
 let loaded = false;
 const listeners = new Set<() => void>();
 

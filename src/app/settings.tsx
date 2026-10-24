@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { Button, Input, Screen, TopBar } from '@/components/ui';
+import { PieceStylePicker } from '@/game-ui/chess';
 import { AccentName, ThemeMode, updateProfile, useProfile } from '@/lib/profile';
 import { resetStats, useStats } from '@/lib/stats';
 import { ACCENTS, makeStyles, paletteFor, radius, useTheme } from '@/ui/theme';
@@ -107,6 +108,11 @@ export default function Settings() {
               );
             })}
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Chess pieces</Text>
+          <PieceStylePicker />
         </View>
 
         <View style={styles.section}>

@@ -2,19 +2,57 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, LayoutRectangle, PanResponder, Text, View } from 'react-native';
 
 import { classify, isJoker, PlayingCard } from '@/games/rummy/melds';
-import { makeStyles, radius, useTheme } from '@/ui/theme';
+import { makeStyles, useTheme } from '@/ui/theme';
 
 import { PlayingCardView } from '../playing-card';
 
-const OVERLAP = 0.45; // share of each card hidden under the next one
-const PAD = 6;
-const LABEL_H = 18;
+const PAD = 4;
+const LABEL_H = 24;
+export const GROUP_GAP = 10;
 
 const LABEL: Record<string, { text: string; color: string }> = {
-  pure: { text: 'Pure sequence', color: '#34D399' },
-  sequence: { text: 'Sequence', color: '#2DD4BF' },
-  set: { text: 'Set', color: '#60A5FA' },
+  pure: { text: 'Pure ✓', color: '#34D399' },
+  sequence: { text: 'Sequence ✓', color: '#2DD4BF' },
+  set: { text: 'Set ✓', color: '#60A5FA' },
 };
+
+/** How many rows the groups wrap onto at this card size (same packing as flex-wrap). */
+function rowsFor(width: number, sizes: number[], card: number, step: number) {
+  let rows = 1;
+  let used = 0;
+  for (const n of sizes) {
+    const w = card + (n - 1) * step + PAD * 2;
+    if (used > 0 && used + GROUP_GAP + w > width) {
+      rows++;
+      used = w;
+    } else used += (used > 0 ? GROUP_GAP : 0) + w;
+  }
+  return rows;
+}
+
+/**
+ * Card size and overlap so every group fits across `width` on one row, or on
+ * two rows when one row would make the cards too small to read.
+ */
+export function handLayout(width: number, groupSizes: number[], maxCard: number) {
+  const sizes = groupSizes.length ? groupSizes : [1];
+  const cards = sizes.reduce((a, b) => a + b, 0);
+  const groups = sizes.length;
+  const avail = width - (groups - 1) * GROUP_GAP - groups * PAD * 2;
+  const loose = Math.max(1, cards - groups);
+  // One row: prefer a comfortable overlap, squeezing to 30% visible before shrinking cards.
+  let w = Math.min(maxCard, avail / (groups + 0.55 * loose));
+  if ((avail - groups * w) / loose < w * 0.3) w = avail / (groups + 0.3 * loose);
+  if (w >= Math.min(52, maxCard) || groups < 2) {
+    return { cardWidth: Math.floor(w), step: Math.floor(Math.min(w * 0.55, (avail - groups * w) / loose)), rows: 1 };
+  }
+  // Two rows: the largest card that still packs into two.
+  for (let card = maxCard; card >= 34; card -= 2) {
+    const step = Math.round(card * 0.5);
+    if (rowsFor(width, sizes, card, step) <= 2) return { cardWidth: card, step, rows: 2 };
+  }
+  return { cardWidth: Math.floor(w), step: Math.floor(w * 0.3), rows: 1 };
+}
 
 export interface HandProps {
   cards: PlayingCard[];
@@ -23,6 +61,8 @@ export interface HandProps {
   onGroupsChange: (groups: number[][]) => void;
   wildRank: number;
   cardWidth: number;
+  /** Horizontal distance between overlapping cards. */
+  step: number;
   selected: number[];
   onToggle?: (id: number) => void;
   /** Called when a card is dragged up onto the table (to discard it). */
@@ -37,10 +77,9 @@ export interface HandProps {
 export function RummyHand(props: HandProps) {
   const styles = useStyles();
   const colors = useTheme();
-  const { cards, groups, wildRank, cardWidth, selected } = props;
+  const { cards, groups, wildRank, cardWidth, step, selected } = props;
   const byId = new Map(cards.map((c) => [c.id, c]));
   const rects = useRef(new Map<number, LayoutRectangle>());
-  const step = cardWidth * (1 - OVERLAP);
   const cardHeight = cardWidth * 1.4;
 
   // Handlers read the latest props without re-creating gesture responders mid-drag.
@@ -54,7 +93,7 @@ export function RummyHand(props: HandProps) {
     const origin = rects.current.get(from.group);
     if (!origin) return false;
     const x = origin.x + PAD + from.index * step + cardWidth / 2 + dx;
-    const y = origin.y + LABEL_H + PAD + cardHeight / 2 + dy;
+    const y = origin.y + LABEL_H + cardHeight / 2 + dy;
     if (y < -cardHeight * 0.4) {
       if (p.onDropOnTable) {
         p.onDropOnTable(id);
@@ -90,21 +129,27 @@ export function RummyHand(props: HandProps) {
         const kind = groupCards.length >= 3 ? classify(groupCards, wildRank) : null;
         const label = kind ? LABEL[kind] : null;
         return (
-          <View
-            key={gi}
-            onLayout={(e) => rects.current.set(gi, e.nativeEvent.layout)}
-            style={[styles.group, label && { borderColor: label.color }]}
-          >
-            <Text style={[styles.label, { color: label?.color ?? colors.faint }]} numberOfLines={1}>
-              {label?.text ?? (groupCards.length ? `${groupCards.length} card${groupCards.length > 1 ? 's' : ''}` : '')}
-            </Text>
+          <View key={gi} onLayout={(e) => rects.current.set(gi, e.nativeEvent.layout)} style={styles.group}>
+            <View style={styles.labelRow}>
+              <Text
+                style={[
+                  styles.label,
+                  label
+                    ? { color: label.color, borderColor: label.color, backgroundColor: `${label.color}22` }
+                    : { color: colors.faint },
+                ]}
+                numberOfLines={1}
+              >
+                {label?.text ?? `${groupCards.length} card${groupCards.length === 1 ? '' : 's'}`}
+              </Text>
+            </View>
             <View style={styles.row}>
               {groupCards.map((card, ci) => (
                 <DraggableCard
                   key={card.id}
                   card={card}
                   width={cardWidth}
-                  first={ci === 0}
+                  overlap={ci === 0 ? 0 : cardWidth - step}
                   wild={isJoker(card, wildRank) && card.suit !== 'J'}
                   selected={selected.includes(card.id)}
                   onPress={props.onToggle ? () => props.onToggle!(card.id) : undefined}
@@ -112,6 +157,7 @@ export function RummyHand(props: HandProps) {
                 />
               ))}
             </View>
+            <View style={[styles.underline, { backgroundColor: label?.color ?? 'rgba(255,255,255,0.12)' }]} />
           </View>
         );
       })}
@@ -122,7 +168,7 @@ export function RummyHand(props: HandProps) {
 function DraggableCard({
   card,
   width,
-  first,
+  overlap,
   wild,
   selected,
   onPress,
@@ -130,7 +176,7 @@ function DraggableCard({
 }: {
   card: PlayingCard;
   width: number;
-  first: boolean;
+  overlap: number;
   wild: boolean;
   selected: boolean;
   onPress?: () => void;
@@ -180,7 +226,7 @@ function DraggableCard({
     <Animated.View
       {...responder.panHandlers}
       style={[
-        !first && { marginLeft: -width * OVERLAP },
+        overlap ? { marginLeft: -overlap } : null,
         { transform: [{ translateX: pan.x }, { translateY: pan.y }, { scale }], zIndex: dragging ? 100 : 0 },
         dragging && styles.dragging,
       ]}
@@ -190,17 +236,30 @@ function DraggableCard({
   );
 }
 
-const useStyles = makeStyles((colors) => ({
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 14 },
-  group: {
-    padding: PAD,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.35)',
-    backgroundColor: 'rgba(15,23,42,0.35)',
+const useStyles = makeStyles(() => ({
+  wrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    columnGap: GROUP_GAP,
+    rowGap: 6,
+    paddingTop: 22,
   },
-  label: { height: LABEL_H, fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  group: { paddingHorizontal: PAD, paddingBottom: 6 },
+  labelRow: { height: LABEL_H, alignItems: 'flex-start', justifyContent: 'center' },
+  label: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    overflow: 'hidden',
+  },
   row: { flexDirection: 'row' },
+  underline: { height: 3, borderRadius: 2, marginTop: 6, opacity: 0.9 },
   dragging: {
     elevation: 12,
     shadowColor: '#000',
