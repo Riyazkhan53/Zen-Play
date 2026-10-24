@@ -9,8 +9,8 @@ import type { Difficulty } from '@/games/types';
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type AccentName = 'teal' | 'violet' | 'blue' | 'pink' | 'orange';
 export type PieceStyle = 'normal' | 'glass' | '3d';
-export type CardFace = 'classic' | 'glass' | '3d';
-export type CardBack = 'gold' | 'black' | 'wizard' | 'hero';
+export type CardFace = 'classic' | 'glass' | '3d' | 'glow';
+export type CardBack = 'gold' | 'black' | 'wizard' | 'hero' | 'glow';
 
 const KEY = '@zenplay_profile';
 

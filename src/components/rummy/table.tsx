@@ -273,6 +273,7 @@ export function RummyTable({
             <PlayingCardView
               card={state.wildCard}
               width={layout.card * 0.9}
+              wild
               label={`Joker card ${shortName(state.wildCard)}`}
             />
           ) : (

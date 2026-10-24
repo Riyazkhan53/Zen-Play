@@ -17,6 +17,9 @@ export const shortName = (c: PlayingCard) => (c.suit === 'J' ? '🃏' : `${rankL
 
 const RED = '#D21F3C';
 const BLACK = '#16181D';
+// Glow theme: neon print on a black card.
+const NEON_BLUE = '#38BDF8';
+const NEON_RED = '#FF5C8A';
 
 // ---------- Backs ----------
 
@@ -30,6 +33,8 @@ interface BackLook {
   /** Drawn in the card's pattern tile (8×8). */
   motif: 'diamond' | 'stars' | 'carbon' | 'rays';
   mark: string;
+  /** Neon emblem that glows. */
+  glow?: boolean;
 }
 
 const BACKS: Record<BackDesign, BackLook> = {
@@ -72,6 +77,17 @@ const BACKS: Record<BackDesign, BackLook> = {
     font: 'BebasNeue_400Regular',
     motif: 'rays',
     mark: 'Z',
+  },
+  // Black card with a glowing blue frame.
+  glow: {
+    colors: ['#0B1224', '#05070D', '#000000'],
+    line: 'rgba(56,189,248,0.22)',
+    frame: NEON_BLUE,
+    emblemBg: 'rgba(56,189,248,0.12)',
+    emblemInk: '#7DD3FC',
+    motif: 'diamond',
+    mark: 'Z',
+    glow: true,
   },
 };
 
@@ -145,7 +161,11 @@ export function CardBackView({ width, design }: { width: number; design: BackDes
         ]}
       >
         <Text
-          style={[styles.backEmblemText, { color: b.emblemInk, fontSize: width * 0.24, fontFamily: b.font }]}
+          style={[
+            styles.backEmblemText,
+            { color: b.emblemInk, fontSize: width * 0.24, fontFamily: b.font },
+            b.glow && { textShadowColor: NEON_BLUE, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
+          ]}
           allowFontScaling={false}
         >
           {b.mark}
@@ -161,6 +181,7 @@ const FACE_FILL: Record<CardFace, [string, string, ...string[]]> = {
   classic: ['#FFFFFF', '#F3F4F7'],
   glass: ['rgba(255,255,255,0.92)', 'rgba(232,240,255,0.62)', 'rgba(210,225,255,0.5)'],
   '3d': ['#FFFFFF', '#EEF0F4', '#D3D8E2'],
+  glow: ['#0D1428', '#05070D'],
 };
 
 /** A standard playing card (height 1.4 × width). `wild` adds a joker badge. */
@@ -192,11 +213,13 @@ export function PlayingCardView({
   const height = width * 1.4;
   const back = faceDown || !card;
   const red = card && (card.suit === 'H' || card.suit === 'D');
-  const ink = red ? RED : BLACK;
+  const glow = face === 'glow';
+  const ink = glow ? (red ? NEON_RED : NEON_BLUE) : red ? RED : BLACK;
   const courtCard = card && card.rank >= 11 && card.suit !== 'J';
   const r = width * 0.09;
   // Embossed ink on the 3D face.
-  const emboss = face === '3d' ? styles.emboss : null;
+  // Embossed ink on the 3D face; neon light around the print on the Glow face.
+  const emboss = face === '3d' ? styles.emboss : glow ? [styles.neon, { textShadowColor: ink }] : null;
   // Non-interactive cards are plain Views: a disabled Pressable on the web still
   // lets its children catch taps, so decorative cards would block the table.
   const Container = (onPress ? Pressable : View) as typeof Pressable;
@@ -213,7 +236,9 @@ export function PlayingCardView({
         { width, height, borderRadius: r },
         !back && face === 'glass' && styles.glassCard,
         !back && face === '3d' && styles.solidCard,
+        !back && glow && styles.glowCard,
         back && styles.back,
+        back && backDesign === 'glow' && styles.glowBack,
         selected && styles.selected,
         selected && { transform: [{ translateY: -width * 0.28 }] },
       ]}
@@ -241,7 +266,11 @@ export function PlayingCardView({
             <>
               <View style={[styles.corner, { top: width * 0.06, left: width * 0.08 }]}>
                 <Text
-                  style={[styles.jokerIndex, { fontSize: width * 0.15, lineHeight: width * 0.16 }]}
+                  style={[
+                    styles.jokerIndex,
+                    glow && [styles.neon, { color: NEON_BLUE, textShadowColor: NEON_BLUE }],
+                    { fontSize: width * 0.15, lineHeight: width * 0.16 },
+                  ]}
                   allowFontScaling={false}
                 >
                   {'J\nO\nK\nE\nR'}
@@ -278,7 +307,7 @@ export function PlayingCardView({
                       height: width * 0.78,
                       borderRadius: width * 0.06,
                       borderColor: ink,
-                      backgroundColor: red ? 'rgba(210,31,60,0.08)' : 'rgba(22,24,29,0.06)',
+                      backgroundColor: glow ? `${ink}1A` : red ? 'rgba(210,31,60,0.08)' : 'rgba(22,24,29,0.06)',
                     },
                   ]}
                 >
@@ -288,7 +317,7 @@ export function PlayingCardView({
                   >
                     {rankLabel(card!.rank)}
                   </Text>
-                  <Text style={{ color: ink, fontSize: width * 0.22 }} allowFontScaling={false}>
+                  <Text style={[emboss, { color: ink, fontSize: width * 0.22 }]} allowFontScaling={false}>
                     {SUIT[card!.suit]}
                   </Text>
                 </View>
@@ -305,6 +334,26 @@ export function PlayingCardView({
                 </Text>
               )}
               {wild ? (
+                // Joker symbol in the top-right corner.
+                <View
+                  style={[
+                    styles.jokerMark,
+                    {
+                      width: width * 0.36,
+                      height: width * 0.36,
+                      borderRadius: width,
+                      right: width * 0.05,
+                      top: width * 0.05,
+                    },
+                  ]}
+                >
+                  <Text style={{ fontSize: width * 0.22 }} allowFontScaling={false}>
+                    🃏
+                  </Text>
+                </View>
+              ) : null}
+              {wild ? (
+                // Also bottom-left, which stays in view when cards overlap in a fanned hand.
                 <View
                   style={[
                     styles.wildBadge,
@@ -360,6 +409,31 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 6,
     shadowOffset: { width: -2, height: 4 },
+  },
+  glowCard: {
+    backgroundColor: '#05070D',
+    borderWidth: 1.2,
+    borderColor: NEON_BLUE,
+    shadowColor: NEON_BLUE,
+    shadowOpacity: 0.85,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  glowBack: {
+    borderColor: NEON_BLUE,
+    shadowColor: NEON_BLUE,
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  neon: { textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8 },
+  jokerMark: {
+    position: 'absolute',
+    backgroundColor: '#FDE68A',
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emboss: {
     textShadowColor: 'rgba(255,255,255,0.9)',

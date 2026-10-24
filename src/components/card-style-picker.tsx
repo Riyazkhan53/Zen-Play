@@ -9,6 +9,7 @@ const FACES: { face: CardFace; label: string }[] = [
   { face: 'classic', label: 'Classic' },
   { face: 'glass', label: 'Glass' },
   { face: '3d', label: '3D' },
+  { face: 'glow', label: 'Glow' },
 ];
 
 const BACKS: { back: CardBack; label: string }[] = [
@@ -16,6 +17,7 @@ const BACKS: { back: CardBack; label: string }[] = [
   { back: 'black', label: 'Black' },
   { back: 'wizard', label: 'Wizard' },
   { back: 'hero', label: 'Hero' },
+  { back: 'glow', label: 'Glow' },
 ];
 
 const SAMPLE = { id: -1, suit: 'H' as const, rank: 12 };
@@ -42,9 +44,9 @@ export function CardStylePicker() {
               style={[styles.option, on && styles.optionOn]}
             >
               <View style={styles.felt}>
-                <PlayingCardView card={SAMPLE_2} width={34} face={face} />
+                <PlayingCardView card={SAMPLE_2} width={30} face={face} />
                 <View style={styles.overlap}>
-                  <PlayingCardView card={SAMPLE} width={34} face={face} />
+                  <PlayingCardView card={SAMPLE} width={30} face={face} />
                 </View>
               </View>
               <Text style={[styles.optionText, on && styles.optionTextOn]}>{label}</Text>
@@ -66,7 +68,7 @@ export function CardStylePicker() {
               accessibilityLabel={`${label} card back`}
               style={[styles.option, on && styles.optionOn]}
             >
-              <PlayingCardView width={40} faceDown back={back} />
+              <PlayingCardView width={36} faceDown back={back} />
               <Text style={[styles.optionText, on && styles.optionTextOn]}>{label}</Text>
             </Pressable>
           );
@@ -96,7 +98,7 @@ const useStyles = makeStyles((colors) => ({
   flex: { flex: 1 },
   wrap: { gap: 8 },
   label: { color: colors.muted, fontSize: 13, fontWeight: '700', marginTop: 4 },
-  row: { flexDirection: 'row', gap: 8 },
+  row: { flexDirection: 'row', gap: 6 },
   option: {
     flex: 1,
     alignItems: 'center',
