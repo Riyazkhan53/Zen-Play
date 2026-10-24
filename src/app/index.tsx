@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
+import { QuickPlay } from '@/components/quick-play';
 import { Button, Input, Screen } from '@/components/ui';
 import { GAMES, gameMeta, GameMeta } from '@/games/registry';
 import { setName, useProfile } from '@/lib/profile';
@@ -145,6 +146,8 @@ export default function Dashboard() {
             </View>
           </View>
         ) : null}
+
+        <QuickPlay />
 
         <View style={[styles.body, wide && styles.bodyWide]}>
           <View style={styles.main}>

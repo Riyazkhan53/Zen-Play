@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-import type { GameId } from '../games/types';
+import type { Difficulty, GameId } from '../games/types';
 import { displayName, getProfile } from '../lib/profile';
 import { Connection, ConnectionEvents, connectLoopback, connectWebSocket } from './connection';
 import { connectLan, LanServer, startLanServer } from './lan';
@@ -83,12 +83,21 @@ function reset() {
 }
 
 /** Same device: everyone plays on this phone/tablet. */
-export function startLocal(gameId: GameId) {
+export function startLocal(gameId: GameId, botDifficulty?: Difficulty) {
   reset();
   const { clientId } = getProfile();
-  localHost = new RoomHost({ gameId, hostClientId: clientId });
+  localHost = new RoomHost({ gameId, hostClientId: clientId, botDifficulty });
   set({ mode: 'local', status: 'connecting' });
   conn = connectLoopback(localHost, clientId, displayName(), events());
+}
+
+/** Quick play: this player against `bots` computer players, started straight away. */
+export function quickPlay(gameId: GameId, opts: { bots: number; difficulty: Difficulty; options?: unknown }) {
+  startLocal(gameId, opts.difficulty);
+  // The loopback host handles messages synchronously, so the seats and start land in order.
+  for (let i = 0; i < opts.bots; i++) send({ t: 'addBot' });
+  if (opts.options !== undefined) send({ t: 'setOptions', options: opts.options });
+  send({ t: 'start' });
 }
 
 /** Online: create a room on the server and share its code. */

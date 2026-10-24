@@ -1,4 +1,4 @@
-import { GameDef, IllegalMoveError, Rng, SeatInfo } from '../types';
+import { Difficulty, GameDef, IllegalMoveError, Rng, SeatInfo } from '../types';
 
 // Board coordinates run 0..100 with y pointing down (screen-style).
 // Each seat plays from one side: 0 bottom, 1 right, 2 top, 3 left.
@@ -397,8 +397,8 @@ export const carrom: GameDef<CarromState, CarromMove> = {
     return next;
   },
 
-  botMove(state, seat, rng) {
-    return chooseShot(state, seat, rng);
+  botMove(state, seat, rng, difficulty: Difficulty = 'medium') {
+    return chooseShot(state, seat, rng, difficulty);
   },
 
   rankings: (state) => state.rankings,
@@ -418,7 +418,7 @@ function pathClear(coins: Coin[], from: [number, number], to: [number, number], 
 }
 
 /** Aims the striker so a target coin heads into a pocket ("ghost ball" aiming), then checks by simulating. */
-export function chooseShot(state: CarromState, seat: number, rng: Rng): CarromMove {
+export function chooseShot(state: CarromState, seat: number, rng: Rng, difficulty: Difficulty = 'medium'): CarromMove {
   const side = sideOf(seat, state.seats.length);
   const own = teamColor(state.teams[seat]);
   const queenPending = typeof state.queen === 'object' && 'pendingSeat' in state.queen;
@@ -470,8 +470,9 @@ export function chooseShot(state: CarromState, seat: number, rng: Rng): CarromMo
     }
   }
   if (best && bestValue > 0) {
-    // A touch of human error.
-    return { ...best, angle: best.angle + (rng() - 0.5) * 0.01 };
+    // Human error: a shaky aim on easy, almost none on hard.
+    const wobble = difficulty === 'easy' ? 0.14 : difficulty === 'medium' ? 0.025 : 0.004;
+    return { ...best, angle: best.angle + (rng() - 0.5) * wobble };
   }
 
   // Nothing clean: hit the nearest own coin firmly to spread the coins.

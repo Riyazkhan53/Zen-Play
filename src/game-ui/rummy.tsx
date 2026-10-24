@@ -124,6 +124,7 @@ function RummyOptionsPicker({ options, isHost, onChange }: GameOptionsProps) {
 
 export const rummyUI: GameUI<RummyState> = {
   shape: 'table',
+  landscape: true,
   Board: RummyTable,
   Options: RummyOptionsPicker,
   Controls: ({ state }) => {

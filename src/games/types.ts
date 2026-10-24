@@ -6,6 +6,9 @@ export type Rng = () => number;
 
 export type GameId = 'ludo' | 'snakes' | 'chess' | 'carrom' | 'rummy' | 'uno';
 
+/** How well computer players play. Medium is the default. */
+export type Difficulty = 'easy' | 'medium' | 'hard';
+
 export interface SeatInfo {
   name: string;
 }
@@ -22,8 +25,8 @@ export interface GameDef<S = unknown, M = unknown> {
   currentSeat(state: S): number | null;
   /** Returns the next state, or throws IllegalMoveError. Never mutates `state`. */
   applyMove(state: S, seat: number, move: M, rng: Rng): S;
-  /** A legal move for a computer player. */
-  botMove(state: S, seat: number, rng: Rng): M;
+  /** A legal move for a computer player at the given skill (medium when omitted). */
+  botMove(state: S, seat: number, rng: Rng, difficulty?: Difficulty): M;
   /** Seats in finishing order (winner first) once the game is over. */
   rankings(state: S): number[];
   /** Overrides how long a computer player waits before acting (e.g. on a results screen). */

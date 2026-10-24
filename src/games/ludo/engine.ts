@@ -1,4 +1,4 @@
-import { GameDef, IllegalMoveError, SeatInfo, rollDie } from '../types';
+import { Difficulty, GameDef, IllegalMoveError, rollDie, SeatInfo } from '../types';
 
 // Track model: 52 shared squares, numbered clockwise from red's start.
 // Each token's progress is relative to its own colour's start:
@@ -171,8 +171,11 @@ export const ludo: GameDef<LudoState, LudoMove> = {
     return endTurn(next, dice === 6 || captured.length > 0 || to === HOME);
   },
 
-  botMove(state, seat) {
+  botMove(state, seat, rng, difficulty: Difficulty = 'medium') {
     if (state.phase === 'roll') return { type: 'roll' };
+    // Easy moves a random token now and then instead of the best one.
+    if (difficulty === 'easy' && rng() < 0.6)
+      return { type: 'move', token: state.movable[Math.floor(rng() * state.movable.length)] };
     const dice = state.dice ?? 0;
     const color = state.colors[seat];
     let best = state.movable[0];

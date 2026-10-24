@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
+import { CardStylePicker } from '@/components/card-style-picker';
 import { Button, Input, Screen, TopBar } from '@/components/ui';
 import { PieceStylePicker } from '@/game-ui/chess';
 import { AccentName, ThemeMode, updateProfile, useProfile } from '@/lib/profile';
@@ -113,6 +114,11 @@ export default function Settings() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Chess pieces</Text>
           <PieceStylePicker />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Playing cards</Text>
+          <CardStylePicker />
         </View>
 
         <View style={styles.section}>

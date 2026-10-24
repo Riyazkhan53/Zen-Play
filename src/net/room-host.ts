@@ -1,5 +1,5 @@
 import { ENGINES } from '../games/registry';
-import { GameDef, GameId, IllegalMoveError, Rng } from '../games/types';
+import { Difficulty, GameDef, GameId, IllegalMoveError, Rng } from '../games/types';
 import type { ClientMessage, HostMessage, RoomView, SeatView } from './protocol';
 
 interface Seat {
@@ -20,6 +20,8 @@ export interface RoomHostOptions {
   rng?: Rng;
   /** Pause before a computer player moves, so people can follow along. */
   botDelayMs?: number;
+  /** How well computer players play. */
+  botDifficulty?: Difficulty;
 }
 
 export interface PeerHandle {
@@ -41,6 +43,7 @@ export class RoomHost {
   private readonly hostClientId: string;
   private readonly rng: Rng;
   private readonly botDelayMs: number;
+  private readonly botDifficulty: Difficulty;
   private seats: Seat[] = [];
   private peers = new Set<Peer>();
   private state: unknown = null;
@@ -57,6 +60,7 @@ export class RoomHost {
     this.hostClientId = opts.hostClientId;
     this.rng = opts.rng ?? Math.random;
     this.botDelayMs = opts.botDelayMs ?? 900;
+    this.botDifficulty = opts.botDifficulty ?? 'medium';
   }
 
   get started() {
@@ -217,7 +221,7 @@ export class RoomHost {
           this.state = this.engine.applyMove(
             this.state,
             seat,
-            this.engine.botMove(this.state, seat, this.rng),
+            this.engine.botMove(this.state, seat, this.rng, this.botDifficulty),
             this.rng,
           );
           this.afterChange();

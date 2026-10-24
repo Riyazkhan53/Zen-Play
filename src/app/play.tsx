@@ -1,7 +1,9 @@
 import * as Haptics from 'expo-haptics';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Banner, Button, Card, Screen, TopBar } from '@/components/ui';
 import { GAME_UI } from '@/game-ui';
@@ -19,6 +21,7 @@ export default function Play() {
   const session = useSession();
   const { clientId } = useProfile();
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [confirmLeave, setConfirmLeave] = useState(false);
   const { room } = session;
   const state = session.game;
@@ -39,6 +42,7 @@ export default function Play() {
   useTurnHaptic(turn, room, clientId);
 
   const ui = room ? GAME_UI[room.gameId] : undefined;
+  useLandscape(!!ui?.landscape);
 
   // Count the finished game in this player's stats (once per game).
   useEffect(() => {
@@ -71,7 +75,8 @@ export default function Play() {
   const myTurn = turn != null && mySeats.includes(turn);
   // Screen caps content at MAX_WIDTH with 16px gutters; the board frame adds 14px.
   const contentWidth = Math.min(width, MAX_WIDTH) - 32;
-  const wide = width >= 700 && width > height * 1.05;
+  // Landscape games keep the table full width with the panel underneath.
+  const wide = !ui.landscape && width >= 700 && width > height * 1.05;
   const panelWidth = 340;
   const boardSize = Math.floor(
     ui.shape === 'table'
@@ -84,7 +89,19 @@ export default function Play() {
   );
   const turnColor = turn != null ? seatColor(room.gameId, turn, room.seats.length) : colors.muted;
   const act = (seat: number, move: unknown) => send({ t: 'move', seat, move });
-  const props = { state, room, size: boardSize, mySeats, seq: session.seq, act };
+  // Landscape tables (Rummy) fill the screen under a slim header, like a card-room app.
+  const fullTable = !!ui.landscape && width > height;
+  const tableWidth = Math.min(width - insets.left - insets.right, MAX_WIDTH) - 16;
+  const boardHeight = fullTable ? height - insets.top - insets.bottom - 40 : Math.max(260, height - 96);
+  const props = {
+    state,
+    room,
+    size: fullTable ? tableWidth : boardSize,
+    height: boardHeight,
+    mySeats,
+    seq: session.seq,
+    act,
+  };
   const { Board, Controls } = ui;
   const draw = ui.isDraw?.(state) ?? false;
 
@@ -139,6 +156,91 @@ export default function Play() {
     </View>
   );
 
+  const leaveDialogs = (
+    <>
+      <Modal visible={over} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <Card style={styles.dialog}>
+            <Text style={styles.trophy}>{draw ? '🤝' : '🏆'}</Text>
+            <Text style={styles.dialogTitle}>{ui.result(state, room)}</Text>
+            {!draw
+              ? rankings.map((seat, place) => (
+                  <View key={seat} style={styles.rank}>
+                    <Text style={styles.rankPlace}>{place + 1}</Text>
+                    <View style={[styles.dot, { backgroundColor: seatColor(room.gameId, seat, room.seats.length) }]} />
+                    <Text style={styles.rankName}>{room.seats[seat]?.name}</Text>
+                    <Text style={styles.rankDetail}>{ui.detail(state, seat)}</Text>
+                  </View>
+                ))
+              : null}
+            {isHost ? (
+              <Button title="Play again" onPress={() => send({ t: 'rematch' })} style={styles.dialogBtn} />
+            ) : (
+              <Text style={[styles.muted, styles.dialogBtn]}>The host can start a rematch.</Text>
+            )}
+            <Button title="Leave" variant="secondary" onPress={leave} style={styles.dialogBtnSmall} />
+          </Card>
+        </View>
+      </Modal>
+      <Modal visible={confirmLeave} transparent animationType="fade" onRequestClose={() => setConfirmLeave(false)}>
+        <View style={styles.overlay}>
+          <Card style={styles.dialog}>
+            <Text style={styles.dialogTitle}>Leave this game?</Text>
+            <Text style={styles.muted}>
+              {session.mode === 'local' || session.mode === 'lan-host'
+                ? 'The game ends for everyone.'
+                : 'You can rejoin with the same room.'}
+            </Text>
+            <Button title="Leave game" variant="danger" onPress={leave} style={styles.dialogBtn} />
+            <Button
+              title="Keep playing"
+              variant="secondary"
+              onPress={() => setConfirmLeave(false)}
+              style={styles.dialogBtnSmall}
+            />
+          </Card>
+        </View>
+      </Modal>
+    </>
+  );
+
+  if (fullTable) {
+    return (
+      <View
+        style={[
+          styles.full,
+          {
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+            paddingLeft: insets.left + 8,
+            paddingRight: insets.right + 8,
+          },
+        ]}
+      >
+        <View style={styles.slimBar}>
+          <Pressable
+            onPress={() => (over ? leave() : setConfirmLeave(true))}
+            hitSlop={10}
+            accessibilityLabel="Back"
+            style={styles.slimBack}
+          >
+            <Text style={styles.slimBackText}>‹</Text>
+          </Pressable>
+          <Text style={styles.slimTitle} numberOfLines={1}>
+            {game.emoji} {game.name}
+          </Text>
+          <Text style={styles.slimStatus} numberOfLines={1}>
+            {ui.status(state, room)}
+          </Text>
+          {room.code ? <Text style={styles.code}>{room.code}</Text> : null}
+        </View>
+        {session.error ? <Banner message={session.error} onClose={clearError} /> : null}
+        <Board {...props} />
+        {leaveDialogs}
+      </View>
+    );
+  }
+
   return (
     <Screen>
       <TopBar
@@ -166,52 +268,20 @@ export default function Play() {
         {panel}
       </ScrollView>
 
-      <Modal visible={over} transparent animationType="fade">
-        <View style={styles.overlay}>
-          <Card style={styles.dialog}>
-            <Text style={styles.trophy}>{draw ? '🤝' : '🏆'}</Text>
-            <Text style={styles.dialogTitle}>{ui.result(state, room)}</Text>
-            {!draw
-              ? rankings.map((seat, place) => (
-                  <View key={seat} style={styles.rank}>
-                    <Text style={styles.rankPlace}>{place + 1}</Text>
-                    <View style={[styles.dot, { backgroundColor: seatColor(room.gameId, seat, room.seats.length) }]} />
-                    <Text style={styles.rankName}>{room.seats[seat]?.name}</Text>
-                    <Text style={styles.rankDetail}>{ui.detail(state, seat)}</Text>
-                  </View>
-                ))
-              : null}
-            {isHost ? (
-              <Button title="Play again" onPress={() => send({ t: 'rematch' })} style={styles.dialogBtn} />
-            ) : (
-              <Text style={[styles.muted, styles.dialogBtn]}>The host can start a rematch.</Text>
-            )}
-            <Button title="Leave" variant="secondary" onPress={leave} style={styles.dialogBtnSmall} />
-          </Card>
-        </View>
-      </Modal>
-
-      <Modal visible={confirmLeave} transparent animationType="fade" onRequestClose={() => setConfirmLeave(false)}>
-        <View style={styles.overlay}>
-          <Card style={styles.dialog}>
-            <Text style={styles.dialogTitle}>Leave this game?</Text>
-            <Text style={styles.muted}>
-              {session.mode === 'local' || session.mode === 'lan-host'
-                ? 'The game ends for everyone.'
-                : 'You can rejoin with the same room.'}
-            </Text>
-            <Button title="Leave game" variant="danger" onPress={leave} style={styles.dialogBtn} />
-            <Button
-              title="Keep playing"
-              variant="secondary"
-              onPress={() => setConfirmLeave(false)}
-              style={styles.dialogBtnSmall}
-            />
-          </Card>
-        </View>
-      </Modal>
+      {leaveDialogs}
     </Screen>
   );
+}
+
+/** Turns the phone sideways while this screen shows a landscape game; back to free rotation after. */
+function useLandscape(on: boolean) {
+  useEffect(() => {
+    if (!on || Platform.OS === 'web') return;
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
+    return () => {
+      ScreenOrientation.unlockAsync().catch(() => {});
+    };
+  }, [on]);
 }
 
 /** A little buzz when it becomes one of this device's players' turn. */
@@ -232,6 +302,12 @@ const useStyles = makeStyles((colors) => ({
   reconnecting: { color: colors.warning, textAlign: 'center', marginBottom: 6 },
   code: { color: colors.accent, fontWeight: '800', letterSpacing: 2 },
   body: { alignItems: 'center', gap: 14, paddingBottom: 24 },
+  full: { flex: 1, backgroundColor: '#060A18', alignItems: 'center' },
+  slimBar: { height: 36, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 10 },
+  slimBack: { width: 32, alignItems: 'center' },
+  slimBackText: { color: '#E2E8F0', fontSize: 30, lineHeight: 32, fontWeight: '300' },
+  slimTitle: { color: '#F8FAFC', fontSize: 15, fontWeight: '900' },
+  slimStatus: { flex: 1, color: 'rgba(226,232,240,0.7)', fontSize: 12, fontWeight: '600', textAlign: 'right' },
   bodyWide: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center' },
   boardFrame: {
     padding: 6,

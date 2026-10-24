@@ -1,23 +1,9 @@
 import { shuffle } from '../shuffle';
-import { GameDef, IllegalMoveError, Rng, SeatInfo } from '../types';
+import { Difficulty, GameDef, IllegalMoveError, Rng, SeatInfo } from '../types';
 
 export type UnoColor = 'red' | 'yellow' | 'green' | 'blue';
 export type UnoValue =
-  | '0'
-  | '1'
-  | '2'
-  | '3'
-  | '4'
-  | '5'
-  | '6'
-  | '7'
-  | '8'
-  | '9'
-  | 'skip'
-  | 'reverse'
-  | 'draw2'
-  | 'wild'
-  | 'wild4';
+  '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'skip' | 'reverse' | 'draw2' | 'wild' | 'wild4';
 
 export interface UnoCard {
   id: number;
@@ -29,9 +15,7 @@ export const UNO_COLORS: UnoColor[] = ['red', 'yellow', 'green', 'blue'];
 const HAND_SIZE = 7;
 
 export type UnoMove =
-  | { type: 'play'; cardId: number; color?: UnoColor; uno?: boolean }
-  | { type: 'draw' }
-  | { type: 'pass' };
+  { type: 'play'; cardId: number; color?: UnoColor; uno?: boolean } | { type: 'draw' } | { type: 'pass' };
 
 export interface UnoEvent {
   seat: number;
@@ -215,7 +199,7 @@ export const uno: GameDef<UnoState, UnoMove> = {
     return { ...next, turn: nextSeat(next, seat) };
   },
 
-  botMove(state, seat, rng) {
+  botMove(state, seat, rng, difficulty: Difficulty = 'medium') {
     const hand = state.hands[seat]!;
     const top = state.discard[state.discard.length - 1];
     if (state.drawnCardId != null) {
@@ -233,7 +217,10 @@ export const uno: GameDef<UnoState, UnoMove> = {
       (c.color === state.color ? 3 : 0) +
       cardPoints(c) / 10 +
       rng() * 2;
-    const card = playable.sort((a, b) => rank(b) - rank(a))[0];
+    // Easy plays any matching card; medium slips up now and then.
+    const careless = difficulty === 'easy' ? 1 : difficulty === 'medium' ? 0.15 : 0;
+    const card =
+      rng() < careless ? playable[Math.floor(rng() * playable.length)] : playable.sort((a, b) => rank(b) - rank(a))[0];
     return {
       type: 'play',
       cardId: card.id,

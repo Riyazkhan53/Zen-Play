@@ -7,6 +7,8 @@ export interface GameUIProps<S> {
   room: RoomView;
   /** Board area size in px: a square for board games, the width for card tables. */
   size: number;
+  /** Height available for the board without scrolling. */
+  height: number;
   /** Seats this device controls (several when sharing one device). */
   mySeats: number[];
   /** Increases with every state update; handy for one-shot animations. */
@@ -39,4 +41,6 @@ export interface GameUI<S> {
   isDraw?(state: S): boolean;
   /** 'square' boards sit beside the panel on tablets; 'table' games use the full width. */
   shape: 'square' | 'table';
+  /** Played in landscape on phones, with the table filling the screen (e.g. Rummy). */
+  landscape?: boolean;
 }

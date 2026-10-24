@@ -1,6 +1,6 @@
 import { shuffle } from '../shuffle';
-import { GameDef, IllegalMoveError, SeatInfo } from '../types';
-import { arrange, cardValue, MAX_POINTS, PlayingCard, solver, Suit } from './melds';
+import { Difficulty, GameDef, IllegalMoveError, SeatInfo } from '../types';
+import { arrange, cardValue, isJoker, MAX_POINTS, PlayingCard, solver, Suit } from './melds';
 
 // 13-card Rummy (Indian rules): two decks plus two printed jokers. A card is
 // turned up each deal and every card of that rank is also a joker.
@@ -378,15 +378,17 @@ export const rummy: GameDef<RummyState, RummyMove> = {
     throw new IllegalMoveError('Unknown move');
   },
 
-  botMove(state, seat) {
+  botMove(state, seat, rng, difficulty: Difficulty = 'medium') {
     if (state.phase === 'roundOver') return { type: 'nextRound' };
+    // Chance of a careless move: ignoring a useful open card or throwing a random card.
+    const careless = difficulty === 'easy' ? 0.55 : difficulty === 'medium' ? 0.15 : 0;
     const hand = state.hands[seat]!;
     // Bots play fair: no using a hidden joker they haven't earned the right to see.
     const wild = state.jokerSeen[seat] ? state.wildRank : -1;
     if (state.phase === 'draw') {
       // Take the open card only if it makes the hand better than now.
       const top = state.discard[state.discard.length - 1];
-      if (top) {
+      if (top && rng() >= careless) {
         const now = bestDiscard(hand, wild, null).score;
         const withTop = bestDiscard([...hand, top], wild, top.id).score;
         if (withTop < now - 2 || (withTop === 0 && now !== 0)) return { type: 'draw', from: 'discard' };
@@ -394,6 +396,10 @@ export const rummy: GameDef<RummyState, RummyMove> = {
       return { type: 'draw', from: 'stock' };
     }
     const { card, score } = bestDiscard(hand, wild, state.takenFromDiscard);
+    if (score !== 0 && rng() < careless) {
+      const throwable = hand.filter((c) => c.id !== state.takenFromDiscard && !isJoker(c, wild));
+      if (throwable.length) return { type: 'discard', cardId: throwable[Math.floor(rng() * throwable.length)].id };
+    }
     return score === 0 ? { type: 'declare', cardId: card.id } : { type: 'discard', cardId: card.id };
   },
 

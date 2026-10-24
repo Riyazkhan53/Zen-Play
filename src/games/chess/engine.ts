@@ -1,4 +1,4 @@
-import { GameDef, IllegalMoveError, SeatInfo } from '../types';
+import { Difficulty, GameDef, IllegalMoveError, SeatInfo } from '../types';
 
 // Squares are 0..63: index = rank * 8 + file, rank 0 is White's back rank.
 // Pieces are two-letter codes: colour (w/b) + type (P N B R Q K).
@@ -332,14 +332,17 @@ export const chess: GameDef<ChessState, ChessMove> = {
     return advance(state, legal, true);
   },
 
-  botMove(state, seat, rng) {
+  botMove(state, seat, rng, difficulty: Difficulty = 'medium') {
     const moves = legalMoves(state);
     if (!moves.length) return { type: 'resign' };
+    // Easy: often just a random legal move, otherwise a one-move look-ahead.
+    if (difficulty === 'easy' && rng() < 0.35) return { type: 'move', ...moves[Math.floor(rng() * moves.length)] };
+    const depth = difficulty === 'easy' ? 0 : difficulty === 'hard' ? 2 : 1;
     const me = seatColor(seat);
     let best: Move[] = [];
     let bestScore = -Infinity;
     for (const move of orderMoves(state, moves)) {
-      const score = -negamax(advance(state, move, false), 1, -Infinity, Infinity, other(me));
+      const score = -negamax(advance(state, move, false), depth, -Infinity, Infinity, other(me));
       if (score > bestScore + 1e-9) {
         bestScore = score;
         best = [move];

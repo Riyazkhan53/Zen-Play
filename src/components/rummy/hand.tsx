@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, LayoutRectangle, PanResponder, Text, View } from 'react-native';
 
-import { classify, isJoker, PlayingCard } from '@/games/rummy/melds';
-import { makeStyles, useTheme } from '@/ui/theme';
+import { cardValue, classify, isJoker, PlayingCard } from '@/games/rummy/melds';
+import { makeStyles } from '@/ui/theme';
 
 import { PlayingCardView } from '../playing-card';
 
 const PAD = 4;
 const LABEL_H = 24;
-export const GROUP_GAP = 10;
+export const GROUP_GAP = 12;
 
 const LABEL: Record<string, { text: string; color: string }> = {
   pure: { text: 'Pure ✓', color: '#34D399' },
@@ -32,9 +32,10 @@ function rowsFor(width: number, sizes: number[], card: number, step: number) {
 
 /**
  * Card size and overlap so every group fits across `width` on one row, or on
- * two rows when one row would make the cards too small to read.
+ * two rows when one row would make the cards too small to read. `oneRow`
+ * forces a single row (landscape tables).
  */
-export function handLayout(width: number, groupSizes: number[], maxCard: number) {
+export function handLayout(width: number, groupSizes: number[], maxCard: number, oneRow = false) {
   const sizes = groupSizes.length ? groupSizes : [1];
   const cards = sizes.reduce((a, b) => a + b, 0);
   const groups = sizes.length;
@@ -43,7 +44,7 @@ export function handLayout(width: number, groupSizes: number[], maxCard: number)
   // One row: prefer a comfortable overlap, squeezing to 30% visible before shrinking cards.
   let w = Math.min(maxCard, avail / (groups + 0.55 * loose));
   if ((avail - groups * w) / loose < w * 0.3) w = avail / (groups + 0.3 * loose);
-  if (w >= Math.min(52, maxCard) || groups < 2) {
+  if (oneRow || w >= Math.min(52, maxCard) || groups < 2) {
     return { cardWidth: Math.floor(w), step: Math.floor(Math.min(w * 0.55, (avail - groups * w) / loose)), rows: 1 };
   }
   // Two rows: the largest card that still packs into two.
@@ -52,6 +53,15 @@ export function handLayout(width: number, groupSizes: number[], maxCard: number)
     if (rowsFor(width, sizes, card, step) <= 2) return { cardWidth: card, step, rows: 2 };
   }
   return { cardWidth: Math.floor(w), step: Math.floor(w * 0.3), rows: 1 };
+}
+
+/** Where a dragged card would land in the hand. */
+type Target = { group: number; slot: number } | { newGroupAt: number } | null;
+
+export interface DropZone {
+  key: string;
+  /** In the hand's own coordinates (negative y is above the hand). */
+  rect: { x: number; y: number; width: number; height: number };
 }
 
 export interface HandProps {
@@ -65,70 +75,158 @@ export interface HandProps {
   step: number;
   selected: number[];
   onToggle?: (id: number) => void;
-  /** Called when a card is dragged up onto the table (to discard it). */
-  onDropOnTable?: (id: number) => void;
+  /** Targets above the hand, e.g. the open pile and the finish slot. */
+  zones?: DropZone[];
+  /** A card was dropped on a zone; anywhere else above the hand is `'table'`. */
+  onZoneDrop?: (zone: string, id: number) => void;
+  /** The zone under a dragged card, for highlighting. */
+  onZoneHover?: (zone: string | null) => void;
+}
+
+interface Drag {
+  id: number;
+  /** Card centre when the drag began. */
+  origin: { x: number; y: number };
+  target: Target;
+  zone: string | null;
 }
 
 /**
- * The player's hand as groups. Tap cards to select them; drag a card to move
- * it to another group (or into the gap after the last group to start a new
- * one); drag it up onto the table to discard.
+ * The player's hand as groups. Tap a card to select it. Drag a card and the
+ * others open a gap where it will land: inside a group, between groups (a new
+ * group), or up onto the table (discard, declare).
  */
 export function RummyHand(props: HandProps) {
   const styles = useStyles();
-  const colors = useTheme();
   const { cards, groups, wildRank, cardWidth, step, selected } = props;
   const byId = new Map(cards.map((c) => [c.id, c]));
   const rects = useRef(new Map<number, LayoutRectangle>());
   const cardHeight = cardWidth * 1.4;
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [ghost] = useState(() => new Animated.ValueXY());
 
-  // Handlers read the latest props without re-creating gesture responders mid-drag.
-  const latest = useRef(props);
+  // Gesture callbacks read the latest values without re-creating responders mid-drag.
+  const latest = useRef({ props, drag, step, cardWidth, cardHeight });
   useEffect(() => {
-    latest.current = props;
+    latest.current = { props, drag, step, cardWidth, cardHeight };
   });
 
-  const drop = (id: number, from: { group: number; index: number }, dx: number, dy: number) => {
-    const p = latest.current;
-    const origin = rects.current.get(from.group);
-    if (!origin) return false;
-    const x = origin.x + PAD + from.index * step + cardWidth / 2 + dx;
-    const y = origin.y + LABEL_H + cardHeight / 2 + dy;
-    if (y < -cardHeight * 0.4) {
-      if (p.onDropOnTable) {
-        p.onDropOnTable(id);
-        return true;
+  const targetAt = (x: number, y: number, id: number): { target: Target; zone: string | null } => {
+    const { props: p, cardHeight: ch, step: st, cardWidth: cw } = latest.current;
+    // Zones first: in landscape the piles sit just above the hand.
+    // Generous hit area: the card's centre need only be near the zone, not inside it.
+    const mx = cw * 0.5;
+    const my = ch * 0.3;
+    const zone = p.zones?.find(
+      (z) =>
+        x >= z.rect.x - mx &&
+        x <= z.rect.x + z.rect.width + mx &&
+        y >= z.rect.y - my &&
+        y <= z.rect.y + z.rect.height + my,
+    );
+    if (zone) return { target: null, zone: zone.key };
+    if (y < -ch * 0.2) return { target: null, zone: 'table' };
+    const placed = [...rects.current.entries()].filter(([g]) => g < p.groups.length);
+    if (!placed.length) return { target: null, zone: null };
+    // The row nearest the finger, then the group (or gap) under it.
+    const rowY = placed.reduce(
+      (best, [, r]) => (Math.abs(r.y + r.height / 2 - y) < Math.abs(best - y) ? r.y + r.height / 2 : best),
+      placed[0][1].y + placed[0][1].height / 2,
+    );
+    const row = placed.filter(([, r]) => Math.abs(r.y + r.height / 2 - rowY) < 4).sort((a, b) => a[1].x - b[1].x);
+    for (let i = 0; i < row.length; i++) {
+      const [g, r] = row[i];
+      if (x >= r.x - 2 && x <= r.x + r.width + 2) {
+        const count = p.groups[g].filter((c) => c !== id).length;
+        const slot = Math.max(0, Math.min(count, Math.round((x - r.x - PAD - cw / 2) / st)));
+        return { target: { group: g, slot }, zone: null };
       }
-      return false;
+      if (x < r.x) return { target: { newGroupAt: g }, zone: null };
     }
-    let target = -1;
-    for (const [g, r] of rects.current) {
-      if (g < p.groups.length && x >= r.x - 8 && x <= r.x + r.width + 8 && y >= r.y - 8 && y <= r.y + r.height + 8)
-        target = g;
-    }
-    const without = p.groups.map((g) => g.filter((c) => c !== id));
-    if (target === -1) {
-      // Dropped in empty space: start a new group.
-      p.onGroupsChange([...without.filter((g) => g.length), [id]]);
-      return true;
-    }
-    const r = rects.current.get(target)!;
-    const slot = Math.max(0, Math.round((x - r.x - PAD - cardWidth / 2) / step));
-    const dest = [...without[target]];
-    dest.splice(Math.min(slot, dest.length), 0, id);
-    without[target] = dest;
-    p.onGroupsChange(without.filter((g) => g.length));
-    return true;
+    return { target: { newGroupAt: row[row.length - 1][0] + 1 }, zone: null };
   };
+
+  const begin = (id: number, group: number, index: number) => {
+    const r = rects.current.get(group);
+    if (!r) return;
+    const { step: st, cardWidth: cw, cardHeight: ch } = latest.current;
+    const origin = { x: r.x + PAD + index * st + cw / 2, y: r.y + LABEL_H + ch / 2 };
+    ghost.setValue({ x: 0, y: 0 });
+    setDrag({ id, origin, target: { group, slot: index }, zone: null });
+  };
+
+  const move = (dx: number, dy: number) => {
+    const d = latest.current.drag;
+    if (!d) return;
+    ghost.setValue({ x: dx, y: dy });
+    const next = targetAt(d.origin.x + dx, d.origin.y + dy, d.id);
+    if (JSON.stringify(next.target) !== JSON.stringify(d.target) || next.zone !== d.zone) {
+      if (next.zone !== d.zone) latest.current.props.onZoneHover?.(next.zone);
+      setDrag({ ...d, ...next });
+    }
+  };
+
+  const end = (dx: number, dy: number) => {
+    const d = latest.current.drag;
+    const p = latest.current.props;
+    setDrag(null);
+    p.onZoneHover?.(null);
+    if (!d) return;
+    const { target, zone } = targetAt(d.origin.x + dx, d.origin.y + dy, d.id);
+    if (zone) {
+      p.onZoneDrop?.(zone, d.id);
+      return;
+    }
+    if (!target) return;
+    const without = p.groups.map((g) => g.filter((c) => c !== d.id));
+    if ('group' in target) {
+      without[target.group] = [...without[target.group]];
+      without[target.group].splice(target.slot, 0, d.id);
+    } else {
+      without.splice(target.newGroupAt, 0, [d.id]);
+    }
+    p.onGroupsChange(without.filter((g) => g.length));
+  };
+
+  const dragging = drag?.id ?? null;
+  const target = drag?.target ?? null;
+  const gap = (key: string) => <View key={key} style={{ width: step }} />;
+  const draggedCard = dragging != null ? byId.get(dragging) : undefined;
 
   return (
     <View style={styles.wrap}>
       {groups.map((ids, gi) => {
         const groupCards = ids.map((id) => byId.get(id)).filter((c): c is PlayingCard => c != null);
-        // Only real melds get a coloured label; anything else is just "N cards".
         const kind = groupCards.length >= 3 ? classify(groupCards, wildRank) : null;
         const label = kind ? LABEL[kind] : null;
-        return (
+        const visible = groupCards.filter((c) => c.id !== dragging);
+        const gapAt = target && 'group' in target && target.group === gi ? target.slot : -1;
+        let shown = 0;
+        const row: React.ReactNode[] = [];
+        groupCards.forEach((card) => {
+          const hidden = card.id === dragging;
+          if (!hidden && shown === gapAt) row.push(gap(`gap${gi}`));
+          row.push(
+            <DraggableCard
+              key={card.id}
+              card={card}
+              width={cardWidth}
+              overlap={hidden || (shown === 0 && gapAt !== 0) ? 0 : cardWidth - step}
+              hidden={hidden}
+              wild={isJoker(card, wildRank) && card.suit !== 'J'}
+              selected={selected.includes(card.id)}
+              onPress={props.onToggle ? () => props.onToggle!(card.id) : undefined}
+              onStart={() => begin(card.id, gi, visible.indexOf(card) === -1 ? 0 : groupCards.indexOf(card))}
+              onMove={move}
+              onEnd={end}
+            />,
+          );
+          if (!hidden) shown++;
+        });
+        if (gapAt >= shown && gapAt >= 0) row.push(gap(`gap${gi}`));
+        const newGroupHere = target && 'newGroupAt' in target && target.newGroupAt === gi;
+        return [
+          newGroupHere ? <NewGroupSlot key={`new${gi}`} width={cardWidth} /> : null,
           <View key={gi} onLayout={(e) => rects.current.set(gi, e.nativeEvent.layout)} style={styles.group}>
             <View style={styles.labelRow}>
               <Text
@@ -136,31 +234,60 @@ export function RummyHand(props: HandProps) {
                   styles.label,
                   label
                     ? { color: label.color, borderColor: label.color, backgroundColor: `${label.color}22` }
-                    : { color: colors.faint },
+                    : { color: '#FCA5A5', backgroundColor: 'rgba(0,0,0,0.35)' },
                 ]}
                 numberOfLines={1}
               >
-                {label?.text ?? `${groupCards.length} card${groupCards.length === 1 ? '' : 's'}`}
+                {label?.text ?? looseLabel(groupCards, wildRank)}
               </Text>
             </View>
-            <View style={styles.row}>
-              {groupCards.map((card, ci) => (
-                <DraggableCard
-                  key={card.id}
-                  card={card}
-                  width={cardWidth}
-                  overlap={ci === 0 ? 0 : cardWidth - step}
-                  wild={isJoker(card, wildRank) && card.suit !== 'J'}
-                  selected={selected.includes(card.id)}
-                  onPress={props.onToggle ? () => props.onToggle!(card.id) : undefined}
-                  onDrop={(dx, dy) => drop(card.id, { group: gi, index: ci }, dx, dy)}
-                />
-              ))}
-            </View>
+            <View style={[styles.row, { minHeight: cardHeight }]}>{row}</View>
             <View style={[styles.underline, { backgroundColor: label?.color ?? 'rgba(255,255,255,0.12)' }]} />
-          </View>
-        );
+          </View>,
+        ];
       })}
+      {target && 'newGroupAt' in target && target.newGroupAt >= groups.length ? (
+        <NewGroupSlot width={cardWidth} />
+      ) : null}
+
+      {drag && draggedCard ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.ghost,
+            {
+              left: drag.origin.x - cardWidth / 2,
+              top: drag.origin.y - cardHeight / 2,
+              transform: [{ translateX: ghost.x }, { translateY: ghost.y }, { scale: 1.1 }, { rotate: '-4deg' }],
+            },
+          ]}
+        >
+          <PlayingCardView
+            card={draggedCard}
+            width={cardWidth}
+            wild={isJoker(draggedCard, wildRank) && draggedCard.suit !== 'J'}
+          />
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
+/** "✕ Invalid (30)" for an unfinished group, "10 pts" for a single card. */
+function looseLabel(cards: PlayingCard[], wildRank: number) {
+  const pts = cards.reduce((n, c) => n + cardValue(c, wildRank), 0);
+  return cards.length > 1 ? `✕ Invalid (${pts})` : `${pts} pts`;
+}
+
+/** Dashed outline where a dragged card would start a new group. */
+function NewGroupSlot({ width }: { width: number }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.group}>
+      <View style={styles.labelRow}>
+        <Text style={[styles.label, styles.newLabel]}>New group</Text>
+      </View>
+      <View style={[styles.newSlot, { width, height: width * 1.4, borderRadius: width * 0.09 }]} />
     </View>
   );
 }
@@ -169,70 +296,55 @@ function DraggableCard({
   card,
   width,
   overlap,
+  hidden,
   wild,
   selected,
   onPress,
-  onDrop,
+  onStart,
+  onMove,
+  onEnd,
 }: {
   card: PlayingCard;
   width: number;
   overlap: number;
+  hidden: boolean;
   wild: boolean;
   selected: boolean;
   onPress?: () => void;
-  onDrop: (dx: number, dy: number) => boolean;
+  onStart: () => void;
+  onMove: (dx: number, dy: number) => void;
+  onEnd: (dx: number, dy: number) => void;
 }) {
-  const styles = useStyles();
-  const [pan] = useState(() => new Animated.ValueXY());
-  const [lift] = useState(() => new Animated.Value(0));
-  const [dragging, setDragging] = useState(false);
-  // Latest drop handler for the long-lived gesture responder.
-  const onDropRef = useRef(onDrop);
+  // Latest handlers for the long-lived gesture responder.
+  const handlers = useRef({ onStart, onMove, onEnd });
   useEffect(() => {
-    onDropRef.current = onDrop;
+    handlers.current = { onStart, onMove, onEnd };
   });
 
-  // The responder must survive re-renders mid-drag. The ref is only read inside the
-  // release callback (an event), never during render, which the lint rule can't tell.
+  // The responder must survive re-renders mid-drag. The ref is only read inside
+  // gesture callbacks (events), never during render, which the lint rule can't tell.
   // eslint-disable-next-line react-hooks/refs
   const [responder] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6,
       onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6,
-      onPanResponderGrant: () => {
-        setDragging(true);
-        Animated.spring(lift, { toValue: 1, useNativeDriver: false }).start();
-      },
-      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderGrant: () => handlers.current.onStart(),
+      onPanResponderMove: (_, g) => handlers.current.onMove(g.dx, g.dy),
       onPanResponderTerminationRequest: () => false,
-      onPanResponderRelease: (_, g) => {
-        const moved = onDropRef.current(g.dx, g.dy);
-        setDragging(false);
-        lift.setValue(0);
-        if (moved) pan.setValue({ x: 0, y: 0 });
-        else Animated.spring(pan, { toValue: { x: 0, y: 0 }, friction: 6, useNativeDriver: false }).start();
-      },
-      onPanResponderTerminate: () => {
-        setDragging(false);
-        lift.setValue(0);
-        Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
-      },
+      onPanResponderRelease: (_, g) => handlers.current.onEnd(g.dx, g.dy),
+      onPanResponderTerminate: () => handlers.current.onEnd(0, 0),
     }),
   );
 
-  const scale = lift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
   return (
-    <Animated.View
+    <View
       {...responder.panHandlers}
-      style={[
-        overlap ? { marginLeft: -overlap } : null,
-        { transform: [{ translateX: pan.x }, { translateY: pan.y }, { scale }], zIndex: dragging ? 100 : 0 },
-        dragging && styles.dragging,
-      ]}
+      // The dragged card stays mounted (it owns the gesture) but takes no space.
+      style={[overlap ? { marginLeft: -overlap } : null, hidden && { width: 0, opacity: 0 }]}
     >
       <PlayingCardView card={card} width={width} wild={wild} selected={selected} onPress={onPress} />
-    </Animated.View>
+    </View>
   );
 }
 
@@ -243,7 +355,7 @@ const useStyles = makeStyles(() => ({
     justifyContent: 'center',
     columnGap: GROUP_GAP,
     rowGap: 6,
-    paddingTop: 22,
+    paddingTop: 18,
   },
   group: { paddingHorizontal: PAD, paddingBottom: 6 },
   labelRow: { height: LABEL_H, alignItems: 'flex-start', justifyContent: 'center' },
@@ -258,13 +370,22 @@ const useStyles = makeStyles(() => ({
     borderColor: 'transparent',
     overflow: 'hidden',
   },
+  newLabel: { color: '#FDE68A' },
   row: { flexDirection: 'row' },
   underline: { height: 3, borderRadius: 2, marginTop: 6, opacity: 0.9 },
-  dragging: {
-    elevation: 12,
+  newSlot: {
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(253,230,138,0.8)',
+    backgroundColor: 'rgba(253,230,138,0.08)',
+  },
+  ghost: {
+    position: 'absolute',
+    zIndex: 100,
+    elevation: 20,
     shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.55,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 10 },
   },
 }));
